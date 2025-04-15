@@ -19,3 +19,5 @@ six==1.16.0
 tzlocal==5.2
 yarl==1.17.1
 yookassa==2.4.0
+pydantic==2.11.3
+python-dateutil==2.9.0

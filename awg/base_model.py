@@ -1,0 +1,54 @@
+from pydantic import BaseModel
+from typing import Optional
+
+
+class YoomoneyModel(BaseModel):
+    currency: str
+    total_amount: int
+    invoice_payload: str
+    telegram_payment_charge_id: str
+    provider_payment_charge_id: str
+    subscription_expiration_date: str | None
+    is_recurring: str | None
+    is_first_recurring: str | None
+    shipping_option_id: str | None
+    order_info: str | None
+
+
+class User(BaseModel):
+    user_id: int
+    telegram_id: str
+    name: Optional[str]
+    end_date: Optional[str]
+    is_unlimited: int
+
+
+class Config(BaseModel):
+    config_id: int
+    user_id: int
+    private_key: str
+    address: str
+    dns: Optional[str]
+
+    # Дополнительные параметры интерфейса
+    jc: Optional[int]
+    jmin: Optional[int]
+    jmax: Optional[int]
+    s1: Optional[int]
+    s2: Optional[int]
+    h1: Optional[int]
+    h2: Optional[int]
+    h3: Optional[int]
+    h4: Optional[int]
+
+    # Параметры peer'а
+    public_key: str
+    preshared_key: Optional[str]
+    allowed_ips: Optional[str]
+    endpoint: Optional[str]
+    persistent_keepalive: Optional[int]
+
+    # Дополнительные параметры для сервиса
+    tunnel_ip: Optional[str]
+    vpn_url: Optional[str]
+    wireguard_config: Optional[str]

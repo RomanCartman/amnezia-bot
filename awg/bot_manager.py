@@ -13,47 +13,44 @@ import zipfile
 import ipaddress
 import humanize
 import shutil
-from aiogram import Bot, types
+from aiogram import types
 from aiogram.dispatcher import Dispatcher
 from aiogram.dispatcher.middlewares import BaseMiddleware
 from aiogram.utils import executor
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from datetime import datetime, timedelta
+from datetime import datetime
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
+from utils import parse_relative_time, parse_transfer
+from services import generate_vpn_key
+from settings import (
+    BOT,
+    ADMINS,
+    MODERATORS,
+    WG_CONFIG_FILE,
+    DOCKER_CONTAINER,
+    ISP_CACHE_FILE,
+    CACHE_TTL,
+)
+
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Загрузка конфигурации
-setting = db.get_config()
-bot_token = setting.get('bot_token')
-admin_ids = setting.get('admin_ids', [])
-moderator_ids = setting.get('moderator_ids', [])
-wg_config_file = setting.get('wg_config_file')
-docker_container = setting.get('docker_container')
-endpoint = setting.get('endpoint')
-
-if not all([bot_token, admin_ids, wg_config_file, docker_container, endpoint]):
-    logger.error("Некоторые обязательные настройки отсутствуют.")
-    sys.exit(1)
-
-admins = [int(admin_id) for admin_id in admin_ids]
-moderators = [int(mod_id) for mod_id in moderator_ids]
-bot = Bot(bot_token)
-WG_CONFIG_FILE = wg_config_file
-DOCKER_CONTAINER = docker_container
-ENDPOINT = endpoint
 
 class AdminMessageDeletionMiddleware(BaseMiddleware):
     async def on_process_message(self, message: types.Message, data: dict):
-        if message.from_user.id in admins and message.text.startswith('/'):
-            asyncio.create_task(delete_message_after_delay(message.chat.id, message.message_id))
+        if message.from_user.id in ADMINS and message.text.startswith("/"):
+            asyncio.create_task(
+                delete_message_after_delay(message.chat.id, message.message_id)
+            )
 
-dp = Dispatcher(bot)
+
+dp = Dispatcher(BOT)
 scheduler = AsyncIOScheduler(timezone=pytz.UTC)
 scheduler.start()
 dp.middleware.setup(AdminMessageDeletionMiddleware())
+
 
 # Главное меню с новым порядком и эмодзи
 def get_main_menu_markup(user_id):
@@ -61,210 +58,207 @@ def get_main_menu_markup(user_id):
     # Последовательное добавление кнопок с помощью add
     markup.add(
         InlineKeyboardButton("➕ Добавить пользователя", callback_data="add_user"),
-        InlineKeyboardButton("📋 Список клиентов", callback_data="list_users")
+        InlineKeyboardButton("📋 Список клиентов", callback_data="list_users"),
     )
     markup.add(
         InlineKeyboardButton("🔑 Получить конфиг", callback_data="get_config"),
-        InlineKeyboardButton("ℹ️ Инструкция", callback_data="instructions")
+        InlineKeyboardButton("ℹ️ Инструкция", callback_data="instructions"),
     )
-    if user_id in admins:
+    if user_id in ADMINS:
         markup.add(
             InlineKeyboardButton("👥 Список админов", callback_data="list_admins"),
-            InlineKeyboardButton("👤 Добавить админа", callback_data="add_admin")
+            InlineKeyboardButton("👤 Добавить админа", callback_data="add_admin"),
         )
-        markup.add(InlineKeyboardButton("💾 Создать бекап", callback_data="create_backup"))
+        markup.add(
+            InlineKeyboardButton("💾 Создать бекап", callback_data="create_backup")
+        )
     return markup
+
 
 user_main_messages = {}
 isp_cache = {}
-ISP_CACHE_FILE = 'files/isp_cache.json'
-CACHE_TTL = 24 * 3600  # 24 часа в секундах
+
 
 def get_interface_name():
-    return os.path.basename(WG_CONFIG_FILE).split('.')[0]
+    return os.path.basename(WG_CONFIG_FILE).split(".")[0]
+
 
 async def load_isp_cache():
     global isp_cache
     if os.path.exists(ISP_CACHE_FILE):
-        async with aiofiles.open(ISP_CACHE_FILE, 'r') as f:
+        async with aiofiles.open(ISP_CACHE_FILE, "r") as f:
             isp_cache = json.loads(await f.read())
 
+
 async def save_isp_cache():
-    async with aiofiles.open(ISP_CACHE_FILE, 'w') as f:
+    async with aiofiles.open(ISP_CACHE_FILE, "w") as f:
         await f.write(json.dumps(isp_cache))
+
 
 async def get_isp_info(ip: str) -> str:
     now = datetime.now(pytz.UTC).timestamp()
-    if ip in isp_cache and (now - isp_cache[ip]['timestamp']) < CACHE_TTL:
-        return isp_cache[ip]['isp']
-    
+    if ip in isp_cache and (now - isp_cache[ip]["timestamp"]) < CACHE_TTL:
+        return isp_cache[ip]["isp"]
+
     try:
         if ipaddress.ip_address(ip).is_private:
             return "Private Range"
     except:
         return "Invalid IP"
-    
+
     async with aiohttp.ClientSession() as session:
         async with session.get(f"http://ip-api.com/json/{ip}?fields=isp") as resp:
             if resp.status == 200:
                 data = await resp.json()
-                isp = data.get('isp', 'Unknown ISP')
-                isp_cache[ip] = {'isp': isp, 'timestamp': now}
+                isp = data.get("isp", "Unknown ISP")
+                isp_cache[ip] = {"isp": isp, "timestamp": now}
                 await save_isp_cache()
                 return isp
     return "Unknown ISP"
 
+
 async def delete_message_after_delay(chat_id: int, message_id: int, delay: int = 2):
     await asyncio.sleep(delay)
     try:
-        await bot.delete_message(chat_id, message_id)
+        await BOT.delete_message(chat_id, message_id)
     except:
         pass
 
-def parse_relative_time(relative_str: str) -> datetime:
-    if not isinstance(relative_str, str) or not relative_str.strip():
-        logger.error(f"Некорректный relative_str: {relative_str}")
-        return datetime.now(pytz.UTC)  # Значение по умолчанию
-    try:
-        relative_str = relative_str.lower().replace(' ago', '')
-        delta = 0
-        for part in relative_str.split(', '):
-            num, unit = part.split()
-            num = int(num)
-            if 'minute' in unit:
-                delta += num * 60
-            elif 'hour' in unit:
-                delta += num * 3600
-            elif 'day' in unit:
-                delta += num * 86400
-            elif 'week' in unit:
-                delta += num * 604800
-            elif 'month' in unit:
-                delta += num * 2592000
-        return datetime.now(pytz.UTC) - timedelta(seconds=delta)
-    except Exception as e:
-        logger.error(f"Ошибка в parse_relative_time: {str(e)}")
-        return datetime.now(pytz.UTC)  # Значение по умолчанию
 
-@dp.message_handler(commands=['start', 'help'])
+@dp.message_handler(commands=["start", "help"])
 async def help_command_handler(message: types.Message):
     user_id = message.from_user.id
-    if user_id in admins or user_id in moderators:
-        sent_message = await message.answer("Выберите действие:", reply_markup=get_main_menu_markup(user_id))
+    if user_id in ADMINS or user_id in MODERATORS:
+        sent_message = await message.answer(
+            "Выберите действие:", reply_markup=get_main_menu_markup(user_id)
+        )
         user_main_messages[user_id] = {
-            'chat_id': sent_message.chat.id,
-            'message_id': sent_message.message_id,
-            'state': None  # Инициализируем state явно
+            "chat_id": sent_message.chat.id,
+            "message_id": sent_message.message_id,
+            "state": None,  # Инициализируем state явно
         }
     else:
         await message.answer("У вас нет доступа к этому боту.")
 
-@dp.message_handler(commands=['add_admin'])
+
+@dp.message_handler(commands=["add_admin"])
 async def add_admin_command(message: types.Message):
-    if message.from_user.id not in admins:
+    if message.from_user.id not in ADMINS:
         await message.answer("У вас нет прав.")
         return
     try:
         new_admin_id = int(message.text.split()[1])
-        if new_admin_id not in admins:
+        if new_admin_id not in ADMINS:
             db.add_admin(new_admin_id)
-            admins.append(new_admin_id)
+            ADMINS.append(new_admin_id)
             await message.answer(f"Админ {new_admin_id} добавлен.")
-            await bot.send_message(new_admin_id, "Вы назначены администратором!")
+            await BOT.send_message(new_admin_id, "Вы назначены администратором!")
     except:
         await message.answer("Формат: /add_admin <user_id>")
+
 
 @dp.message_handler()
 async def handle_messages(message: types.Message):
     user_id = message.from_user.id
-    if user_id not in admins and user_id not in moderators:
+    if user_id not in ADMINS and user_id not in MODERATORS:
         await message.answer("У вас нет доступа.")
         return
-    
-    user_state = user_main_messages.get(user_id, {}).get('state')
-    if user_state == 'waiting_for_user_name':
+
+    user_state = user_main_messages.get(user_id, {}).get("state")
+    if user_state == "waiting_for_user_name":
         user_name = message.text.strip()
-        if not re.match(r'^[a-zA-Z0-9_-]+$', user_name):
+        if not re.match(r"^[a-zA-Z0-9_-]+$", user_name):
             await message.reply("Имя может содержать только буквы, цифры, - и _.")
             return
         success = db.root_add(user_name, ipv6=False)
         if success:
-            conf_path = os.path.join('users', user_name, f'{user_name}.conf')
+            conf_path = os.path.join("users", user_name, f"{user_name}.conf")
             if os.path.exists(conf_path):
                 vpn_key = await generate_vpn_key(conf_path)
                 caption = f"Конфигурация для {user_name}:\nAmneziaVPN:\n[Google Play](https://play.google.com/store/apps/details?id=org.amnezia.vpn&hl=ru)\n[GitHub](https://github.com/amnezia-vpn/amnezia-client)\n```\n{vpn_key}\n```"
-                with open(conf_path, 'rb') as config:
+                with open(conf_path, "rb") as config:
                     # Отправляем конфиг отдельным сообщением и закрепляем его
-                    config_message = await bot.send_document(user_id, config, caption=caption, parse_mode="Markdown")
-                    await bot.pin_chat_message(user_id, config_message.message_id, disable_notification=True)
+                    config_message = await BOT.send_document(
+                        user_id, config, caption=caption, parse_mode="Markdown"
+                    )
+                    await BOT.pin_chat_message(
+                        user_id, config_message.message_id, disable_notification=True
+                    )
         # Обновляем меню внизу, не закрепляя его
-        await bot.edit_message_text(
-            chat_id=user_main_messages[user_id]['chat_id'],
-            message_id=user_main_messages[user_id]['message_id'],
+        await BOT.edit_message_text(
+            chat_id=user_main_messages[user_id]["chat_id"],
+            message_id=user_main_messages[user_id]["message_id"],
             text="Выберите действие:",
-            reply_markup=get_main_menu_markup(user_id)
+            reply_markup=get_main_menu_markup(user_id),
         )
-        user_main_messages[user_id]['state'] = None
-    elif user_state == 'waiting_for_admin_id' and user_id in admins:
+        user_main_messages[user_id]["state"] = None
+    elif user_state == "waiting_for_admin_id" and user_id in ADMINS:
         try:
             new_admin_id = int(message.text.strip())
-            if new_admin_id not in admins:
+            if new_admin_id not in ADMINS:
                 db.add_admin(new_admin_id)
-                admins.append(new_admin_id)
+                ADMINS.append(new_admin_id)
                 await message.reply(f"Админ {new_admin_id} добавлен.")
-                await bot.send_message(new_admin_id, "Вы назначены администратором!")
-            await bot.edit_message_text(
-                chat_id=user_main_messages[user_id]['chat_id'],
-                message_id=user_main_messages[user_id]['message_id'],
+                await BOT.send_message(new_admin_id, "Вы назначены администратором!")
+            await BOT.edit_message_text(
+                chat_id=user_main_messages[user_id]["chat_id"],
+                message_id=user_main_messages[user_id]["message_id"],
                 text="Выберите действие:",
-                reply_markup=get_main_menu_markup(user_id)
+                reply_markup=get_main_menu_markup(user_id),
             )
-            user_main_messages[user_id]['state'] = None
+            user_main_messages[user_id]["state"] = None
         except:
             await message.reply("Введите корректный Telegram ID.")
+
 
 @dp.callback_query_handler(lambda c: c.data == "add_user")
 async def prompt_for_user_name(callback_query: types.CallbackQuery):
     user_id = callback_query.from_user.id
-    if user_id not in admins and user_id not in moderators:
+    if user_id not in ADMINS and user_id not in MODERATORS:
         await callback_query.answer("Нет прав.", show_alert=True)
         return
-    await bot.edit_message_text(
+    await BOT.edit_message_text(
         chat_id=callback_query.message.chat.id,
         message_id=callback_query.message.message_id,
         text="Введите имя пользователя:",
-        reply_markup=InlineKeyboardMarkup().add(InlineKeyboardButton("🏠 Домой", callback_data="home"))
+        reply_markup=InlineKeyboardMarkup().add(
+            InlineKeyboardButton("🏠 Домой", callback_data="home")
+        ),
     )
-    user_main_messages[user_id]['state'] = 'waiting_for_user_name'
+    user_main_messages[user_id]["state"] = "waiting_for_user_name"
     await callback_query.answer()
+
 
 @dp.callback_query_handler(lambda c: c.data == "add_admin")
 async def prompt_for_admin_id(callback_query: types.CallbackQuery):
     user_id = callback_query.from_user.id
-    if user_id not in admins:
+    if user_id not in ADMINS:
         await callback_query.answer("Нет прав.", show_alert=True)
         return
-    await bot.edit_message_text(
+    await BOT.edit_message_text(
         chat_id=callback_query.message.chat.id,
         message_id=callback_query.message.message_id,
         text="Введите Telegram ID нового админа:",
-        reply_markup=InlineKeyboardMarkup().add(InlineKeyboardButton("🏠 Домой", callback_data="home"))
+        reply_markup=InlineKeyboardMarkup().add(
+            InlineKeyboardButton("🏠 Домой", callback_data="home")
+        ),
     )
-    user_main_messages[user_id]['state'] = 'waiting_for_admin_id'
+    user_main_messages[user_id]["state"] = "waiting_for_admin_id"
     await callback_query.answer()
 
-@dp.callback_query_handler(lambda c: c.data.startswith('client_'))
+
+@dp.callback_query_handler(lambda c: c.data.startswith("client_"))
 async def client_selected_callback(callback_query: types.CallbackQuery):
     user_id = callback_query.from_user.id
-    if user_id not in admins and user_id not in moderators:
+    if user_id not in ADMINS and user_id not in MODERATORS:
         await callback_query.answer("Нет прав.", show_alert=True)
         return
-    
+
     try:
         logger.info(f"Callback data: {callback_query.data}")
-        username = callback_query.data.split('client_')[1]
+        username = callback_query.data.split("client_")[1]
         logger.info(f"Выбран клиент: {username}")
-        
+
         clients = db.get_client_list()
         logger.info(f"Список клиентов: {clients}")
         client_info = next((c for c in clients if c[0] == username), None)
@@ -272,49 +266,66 @@ async def client_selected_callback(callback_query: types.CallbackQuery):
             await callback_query.answer("Пользователь не найден.", show_alert=True)
             return
         logger.info(f"Информация о клиенте: {client_info}")
-        
+
         # Базовые значения
         status = "🔴 Офлайн"
         incoming_traffic = "↓—"
         outgoing_traffic = "↑—"
         ipv4_address = "—"
-        if isinstance(client_info, (tuple, list)) and len(client_info) > 2 and client_info[2] is not None:
+        if (
+            isinstance(client_info, (tuple, list))
+            and len(client_info) > 2
+            and client_info[2] is not None
+        ):
             logger.info(f"client_info[2]: {client_info[2]}")
-            ip_match = re.search(r'(\d{1,3}\.){3}\d{1,3}/\d+', str(client_info[2]))
+            ip_match = re.search(r"(\d{1,3}\.){3}\d{1,3}/\d+", str(client_info[2]))
             ipv4_address = ip_match.group(0) if ip_match else "—"
         else:
             logger.info(f"client_info некорректно: {client_info}")
-        
+
         # Проверяем активность
         active_clients = db.get_active_list()
         logger.info(f"Список активных клиентов: {active_clients}")
         active_info = next((ac for ac in active_clients if ac[0] == username), None)
         logger.info(f"Активная информация: {active_info}")
-        
-        if (active_info is not None and isinstance(active_info, (tuple, list)) and 
-            len(active_info) > 2 and active_info[1] is not None and 
-            active_info[1].lower() not in ['never', 'нет данных', '-']):
+
+        if (
+            active_info is not None
+            and isinstance(active_info, (tuple, list))
+            and len(active_info) > 2
+            and active_info[1] is not None
+            and active_info[1].lower() not in ["never", "нет данных", "-"]
+        ):
             logger.info(f"active_info[1]: {active_info[1]}")
             try:
                 last_handshake = parse_relative_time(active_info[1])
                 if last_handshake is not None:
                     logger.info(f"last_handshake: {last_handshake}")
-                    status = "🟢 Онлайн" if (datetime.now(pytz.UTC) - last_handshake).total_seconds() <= 60 else "❌ Офлайн"
+                    status = (
+                        "🟢 Онлайн"
+                        if (datetime.now(pytz.UTC) - last_handshake).total_seconds()
+                        <= 60
+                        else "❌ Офлайн"
+                    )
                 if len(active_info) > 2 and active_info[2] is not None:
                     logger.info(f"active_info[2]: {active_info[2]}")
                     try:
                         transfer_result = parse_transfer(active_info[2])
                         if transfer_result is not None:
                             incoming_bytes, outgoing_bytes = transfer_result
-                            incoming_traffic = f"↓{humanize.naturalsize(incoming_bytes)}"
-                            outgoing_traffic = f"↑{humanize.naturalsize(outgoing_bytes)}"
+                            incoming_traffic = (
+                                f"↓{humanize.naturalsize(incoming_bytes)}"
+                            )
+                            outgoing_traffic = (
+                                f"↑{humanize.naturalsize(outgoing_bytes)}"
+                            )
                         else:
                             logger.info("parse_transfer вернул None")
                     except Exception as e:
                         logger.error(f"Ошибка в parse_transfer: {str(e)}")
             except Exception as e:
                 logger.error(f"Ошибка в parse_relative_time: {str(e)}")
-        
+
         # Формируем текст профиля
         text = (
             f"📧 *Имя:* {username}\n"
@@ -323,316 +334,370 @@ async def client_selected_callback(callback_query: types.CallbackQuery):
             f"🔼 *Исходящий:* {incoming_traffic}\n"
             f"🔽 *Входящий:* {outgoing_traffic}"
         )
-        
+
         # Создаём клавиатуру
         keyboard = InlineKeyboardMarkup(row_width=2).add(
             InlineKeyboardButton("ℹ️ IP info", callback_data=f"ip_info_{username}"),
-            InlineKeyboardButton("🔗 Подключения", callback_data=f"connections_{username}"),
+            InlineKeyboardButton(
+                "🔗 Подключения", callback_data=f"connections_{username}"
+            ),
             InlineKeyboardButton("🗑️ Удалить", callback_data=f"delete_user_{username}"),
             InlineKeyboardButton("⬅️ Назад", callback_data="list_users"),
-            InlineKeyboardButton("🏠 Домой", callback_data="home")
+            InlineKeyboardButton("🏠 Домой", callback_data="home"),
         )
-        
+
         logger.info(f"Редактирование сообщения для {username}")
-        await bot.edit_message_text(
+        await BOT.edit_message_text(
             chat_id=callback_query.message.chat.id,
             message_id=callback_query.message.message_id,
             text=text,
             parse_mode="Markdown",
-            reply_markup=keyboard
+            reply_markup=keyboard,
         )
         await callback_query.answer()
-    
+
     except Exception as e:
         logger.error(f"Ошибка в client_selected_callback: {str(e)}")
-        await bot.edit_message_text(
+        await BOT.edit_message_text(
             chat_id=callback_query.message.chat.id,
             message_id=callback_query.message.message_id,
             text=f"Ошибка при загрузке профиля: {str(e)}",
             reply_markup=InlineKeyboardMarkup().add(
                 InlineKeyboardButton("⬅️ Назад", callback_data="list_users"),
-                InlineKeyboardButton("🏠 Домой", callback_data="home")
-            )
+                InlineKeyboardButton("🏠 Домой", callback_data="home"),
+            ),
         )
         await callback_query.answer("Ошибка на сервере.", show_alert=True)
+
 
 @dp.callback_query_handler(lambda c: c.data == "list_users")
 async def list_users_callback(callback_query: types.CallbackQuery):
     user_id = callback_query.from_user.id
-    if user_id not in admins and user_id not in moderators:
+    if user_id not in ADMINS and user_id not in MODERATORS:
         await callback_query.answer("Нет прав.", show_alert=True)
         return
-    
+
     try:
         logger.info("Запуск list_users_callback")
         clients = db.get_client_list()
         logger.info(f"Клиенты: {clients}")
         if not clients:
-            await bot.edit_message_text(
+            await BOT.edit_message_text(
                 chat_id=callback_query.message.chat.id,
                 message_id=callback_query.message.message_id,
                 text="Список клиентов пуст.",
                 reply_markup=InlineKeyboardMarkup().add(
                     InlineKeyboardButton("🏠 Домой", callback_data="home")
-                )
+                ),
             )
             await callback_query.answer()
             return
-        
+
         keyboard = InlineKeyboardMarkup(row_width=2)
         active_clients = {client[0]: client[1] for client in db.get_active_list()}
         logger.info(f"Активные клиенты: {active_clients}")
         now = datetime.now(pytz.UTC)
-        
+
         for client in clients:
             username = client[0]
             last_handshake = active_clients.get(username)
             logger.info(f"Клиент: {username}, last_handshake: {last_handshake}")
             # Упрощённая логика статуса для теста
-            status = "❌" if not last_handshake or last_handshake.lower() in ['never', 'нет данных', '-'] else "🟢"
+            status = (
+                "❌"
+                if not last_handshake
+                or last_handshake.lower() in ["never", "нет данных", "-"]
+                else "🟢"
+            )
             button_text = f"{status} {username}"
-            keyboard.insert(InlineKeyboardButton(button_text, callback_data=f"client_{username}"))
-        
+            keyboard.insert(
+                InlineKeyboardButton(button_text, callback_data=f"client_{username}")
+            )
+
         keyboard.add(InlineKeyboardButton("🏠 Домой", callback_data="home"))
-        
-        await bot.edit_message_text(
+
+        await BOT.edit_message_text(
             chat_id=callback_query.message.chat.id,
             message_id=callback_query.message.message_id,
             text="Выберите пользователя:",
-            reply_markup=keyboard
+            reply_markup=keyboard,
         )
         await callback_query.answer()
-    
+
     except Exception as e:
         logger.error(f"Ошибка в list_users_callback: {str(e)}")
-        await bot.edit_message_text(
+        await BOT.edit_message_text(
             chat_id=callback_query.message.chat.id,
             message_id=callback_query.message.message_id,
             text=f"Ошибка: {str(e)}",
             reply_markup=InlineKeyboardMarkup().add(
                 InlineKeyboardButton("🏠 Домой", callback_data="home")
-            )
+            ),
         )
         await callback_query.answer("Ошибка на сервере.", show_alert=True)
+
 
 @dp.callback_query_handler(lambda c: c.data == "list_admins")
 async def list_admins_callback(callback_query: types.CallbackQuery):
     user_id = callback_query.from_user.id
-    if user_id not in admins:
+    if user_id not in ADMINS:
         await callback_query.answer("Нет прав.", show_alert=True)
         return
     keyboard = InlineKeyboardMarkup(row_width=2)
-    for admin_id in admins:
-        keyboard.insert(InlineKeyboardButton(f"🗑️ Удалить {admin_id}", callback_data=f"remove_admin_{admin_id}"))
+    for admin_id in ADMINS:
+        keyboard.insert(
+            InlineKeyboardButton(
+                f"🗑️ Удалить {admin_id}", callback_data=f"remove_admin_{admin_id}"
+            )
+        )
     keyboard.add(InlineKeyboardButton("🏠 Домой", callback_data="home"))
-    await bot.edit_message_text(
+    await BOT.edit_message_text(
         chat_id=callback_query.message.chat.id,
         message_id=callback_query.message.message_id,
-        text=f"Администраторы:\n" + "\n".join(f"- {admin_id}" for admin_id in admins),
-        reply_markup=keyboard
+        text=f"Администраторы:\n" + "\n".join(f"- {admin_id}" for admin_id in ADMINS),
+        reply_markup=keyboard,
     )
     await callback_query.answer()
 
-@dp.callback_query_handler(lambda c: c.data.startswith('remove_admin_'))
+
+@dp.callback_query_handler(lambda c: c.data.startswith("remove_admin_"))
 async def remove_admin_callback(callback_query: types.CallbackQuery):
     user_id = callback_query.from_user.id
-    if user_id not in admins:
+    if user_id not in ADMINS:
         await callback_query.answer("Нет прав.", show_alert=True)
         return
-    admin_id = int(callback_query.data.split('_')[2])
-    if admin_id not in admins or len(admins) <= 1:
-        await callback_query.answer("Нельзя удалить последнего админа или несуществующего.", show_alert=True)
+    admin_id = int(callback_query.data.split("_")[2])
+    if admin_id not in ADMINS or len(ADMINS) <= 1:
+        await callback_query.answer(
+            "Нельзя удалить последнего админа или несуществующего.", show_alert=True
+        )
         return
     db.remove_admin(admin_id)
-    admins.remove(admin_id)
-    await bot.send_message(admin_id, "Вы удалены из администраторов.")
+    ADMINS.remove(admin_id)
+    await BOT.send_message(admin_id, "Вы удалены из администраторов.")
     await list_admins_callback(callback_query)
 
-@dp.callback_query_handler(lambda c: c.data.startswith('connections_'))
+
+@dp.callback_query_handler(lambda c: c.data.startswith("connections_"))
 async def client_connections_callback(callback_query: types.CallbackQuery):
     user_id = callback_query.from_user.id
-    if user_id not in admins and user_id not in moderators:
+    if user_id not in ADMINS and user_id not in MODERATORS:
         await callback_query.answer("Нет прав.", show_alert=True)
         return
-    username = callback_query.data.split('connections_')[1]
-    file_path = os.path.join('files', 'connections', f'{username}_ip.json')
+    username = callback_query.data.split("connections_")[1]
+    file_path = os.path.join("files", "connections", f"{username}_ip.json")
     if not os.path.exists(file_path):
         await callback_query.answer("Нет данных о подключениях.", show_alert=True)
         return
-    
-    async with aiofiles.open(file_path, 'r') as f:
+
+    async with aiofiles.open(file_path, "r") as f:
         data = json.loads(await f.read())
-    last_connections = sorted(data.items(), key=lambda x: datetime.strptime(x[1], '%d.%m.%Y %H:%M'), reverse=True)[:5]
-    isp_results = await asyncio.gather(*(get_isp_info(ip) for ip, _ in last_connections))
-    
-    text = f"*Последние подключения {username}:*\n" + "\n".join(f"{ip} ({isp}) - {time}" for (ip, time), isp in zip(last_connections, isp_results))
+    last_connections = sorted(
+        data.items(),
+        key=lambda x: datetime.strptime(x[1], "%d.%m.%Y %H:%M"),
+        reverse=True,
+    )[:5]
+    isp_results = await asyncio.gather(
+        *(get_isp_info(ip) for ip, _ in last_connections)
+    )
+
+    text = f"*Последние подключения {username}:*\n" + "\n".join(
+        f"{ip} ({isp}) - {time}"
+        for (ip, time), isp in zip(last_connections, isp_results)
+    )
     keyboard = InlineKeyboardMarkup(row_width=2).add(
         InlineKeyboardButton("⬅️ Назад", callback_data=f"client_{username}"),
-        InlineKeyboardButton("🏠 Домой", callback_data="home")
+        InlineKeyboardButton("🏠 Домой", callback_data="home"),
     )
-    await bot.edit_message_text(
+    await BOT.edit_message_text(
         chat_id=callback_query.message.chat.id,
         message_id=callback_query.message.message_id,
         text=text,
         parse_mode="Markdown",
-        reply_markup=keyboard
+        reply_markup=keyboard,
     )
     await callback_query.answer()
 
-@dp.callback_query_handler(lambda c: c.data.startswith('ip_info_'))
+
+@dp.callback_query_handler(lambda c: c.data.startswith("ip_info_"))
 async def ip_info_callback(callback_query: types.CallbackQuery):
     user_id = callback_query.from_user.id
-    if user_id not in admins and user_id not in moderators:
+    if user_id not in ADMINS and user_id not in MODERATORS:
         await callback_query.answer("Нет прав.", show_alert=True)
         return
-    username = callback_query.data.split('ip_info_')[1]
+    username = callback_query.data.split("ip_info_")[1]
     active_info = next((ac for ac in db.get_active_list() if ac[0] == username), None)
     if not active_info:
         await callback_query.answer("Нет данных о подключении.", show_alert=True)
         return
-    
-    ip_address = active_info[3].split(':')[0]
+
+    ip_address = active_info[3].split(":")[0]
     async with aiohttp.ClientSession() as session:
         async with session.get(f"http://ip-api.com/json/{ip_address}") as resp:
             data = await resp.json() if resp.status == 200 else {}
-    
-    text = f"*IP info {username}:*\n" + "\n".join(f"{k.capitalize()}: {v}" for k, v in data.items())
+
+    text = f"*IP info {username}:*\n" + "\n".join(
+        f"{k.capitalize()}: {v}" for k, v in data.items()
+    )
     keyboard = InlineKeyboardMarkup(row_width=2).add(
         InlineKeyboardButton("⬅️ Назад", callback_data=f"client_{username}"),
-        InlineKeyboardButton("🏠 Домой", callback_data="home")
+        InlineKeyboardButton("🏠 Домой", callback_data="home"),
     )
-    await bot.edit_message_text(
+    await BOT.edit_message_text(
         chat_id=callback_query.message.chat.id,
         message_id=callback_query.message.message_id,
         text=text,
         parse_mode="Markdown",
-        reply_markup=keyboard
+        reply_markup=keyboard,
     )
     await callback_query.answer()
 
-@dp.callback_query_handler(lambda c: c.data.startswith('delete_user_'))
+
+@dp.callback_query_handler(lambda c: c.data.startswith("delete_user_"))
 async def client_delete_callback(callback_query: types.CallbackQuery):
     user_id = callback_query.from_user.id
-    if user_id not in admins and user_id not in moderators:
+    if user_id not in ADMINS and user_id not in MODERATORS:
         await callback_query.answer("Нет прав.", show_alert=True)
         return
-    username = callback_query.data.split('delete_user_')[1]
+    username = callback_query.data.split("delete_user_")[1]
     if db.deactive_user_db(username):
-        shutil.rmtree(os.path.join('users', username), ignore_errors=True)
+        shutil.rmtree(os.path.join("users", username), ignore_errors=True)
         text = f"Пользователь **{username}** удален."
     else:
         text = f"Не удалось удалить **{username}**."
-    await bot.edit_message_text(
+    await BOT.edit_message_text(
         chat_id=callback_query.message.chat.id,
         message_id=callback_query.message.message_id,
         text=text,
         parse_mode="Markdown",
-        reply_markup=get_main_menu_markup(user_id)
+        reply_markup=get_main_menu_markup(user_id),
     )
     await callback_query.answer()
+
 
 @dp.callback_query_handler(lambda c: c.data == "home")
 async def return_home(callback_query: types.CallbackQuery):
     user_id = callback_query.from_user.id
-    if user_id not in admins and user_id not in moderators:
+    if user_id not in ADMINS and user_id not in MODERATORS:
         await callback_query.answer("Нет прав.", show_alert=True)
         return
-    user_main_messages[user_id]['state'] = None
-    await bot.edit_message_text(
+    user_main_messages[user_id]["state"] = None
+    await BOT.edit_message_text(
         chat_id=callback_query.message.chat.id,
         message_id=callback_query.message.message_id,
         text="Выберите действие:",
-        reply_markup=get_main_menu_markup(user_id)
+        reply_markup=get_main_menu_markup(user_id),
     )
     await callback_query.answer()
+
 
 @dp.callback_query_handler(lambda c: c.data == "get_config")
 async def list_users_for_config(callback_query: types.CallbackQuery):
     user_id = callback_query.from_user.id
-    if user_id not in admins and user_id not in moderators:
+    if user_id not in ADMINS and user_id not in MODERATORS:
         await callback_query.answer("Нет прав.", show_alert=True)
         return
     clients = db.get_client_list()
     if not clients:
         await callback_query.answer("Список пуст.", show_alert=True)
         return
-    
+
     keyboard = InlineKeyboardMarkup(row_width=2)
     for client in clients:
-        keyboard.insert(InlineKeyboardButton(client[0], callback_data=f"send_config_{client[0]}"))
+        keyboard.insert(
+            InlineKeyboardButton(client[0], callback_data=f"send_config_{client[0]}")
+        )
     keyboard.add(InlineKeyboardButton("🏠 Домой", callback_data="home"))
-    await bot.edit_message_text(
+    await BOT.edit_message_text(
         chat_id=callback_query.message.chat.id,
         message_id=callback_query.message.message_id,
         text="Выберите пользователя:",
-        reply_markup=keyboard
+        reply_markup=keyboard,
     )
     await callback_query.answer()
 
-@dp.callback_query_handler(lambda c: c.data.startswith('send_config_'))
+
+@dp.callback_query_handler(lambda c: c.data.startswith("send_config_"))
 async def send_user_config(callback_query: types.CallbackQuery):
     user_id = callback_query.from_user.id
-    if user_id not in admins and user_id not in moderators:
+    if user_id not in ADMINS and user_id not in MODERATORS:
         await callback_query.answer("Нет прав.", show_alert=True)
         return
-    username = callback_query.data.split('send_config_')[1]
-    conf_path = os.path.join('users', username, f'{username}.conf')
+    username = callback_query.data.split("send_config_")[1]
+    conf_path = os.path.join("users", username, f"{username}.conf")
     if os.path.exists(conf_path):
         vpn_key = await generate_vpn_key(conf_path)
         caption = f"Конфигурация для {username}:\nAmneziaVPN:\n[Google Play](https://play.google.com/store/apps/details?id=org.amnezia.vpn&hl=ru)\n[GitHub](https://github.com/amnezia-vpn/amnezia-client)\n```\n{vpn_key}\n```"
-        with open(conf_path, 'rb') as config:
+        with open(conf_path, "rb") as config:
             # Отправляем конфиг отдельным сообщением и закрепляем его
-            config_message = await bot.send_document(user_id, config, caption=caption, parse_mode="Markdown")
-            await bot.pin_chat_message(user_id, config_message.message_id, disable_notification=True)
+            config_message = await BOT.send_document(
+                user_id, config, caption=caption, parse_mode="Markdown"
+            )
+            await BOT.pin_chat_message(
+                user_id, config_message.message_id, disable_notification=True
+            )
     else:
-        await bot.send_message(user_id, f"Конфигурация для **{username}** не найдена.", parse_mode="Markdown")
+        await BOT.send_message(
+            user_id,
+            f"Конфигурация для **{username}** не найдена.",
+            parse_mode="Markdown",
+        )
     await callback_query.answer()
+
 
 @dp.callback_query_handler(lambda c: c.data == "create_backup")
 async def create_backup_callback(callback_query: types.CallbackQuery):
     user_id = callback_query.from_user.id
-    if user_id not in admins:
+    if user_id not in ADMINS:
         await callback_query.answer("Нет прав.", show_alert=True)
         return
     backup_filename = f"backup_{datetime.now().strftime('%Y-%m-%d')}.zip"
-    with zipfile.ZipFile(backup_filename, 'w') as zipf:
-        for file in ['awg-decode.py', 'newclient.sh', 'removeclient.sh']:
+    with zipfile.ZipFile(backup_filename, "w") as zipf:
+        for file in ["awg-decode.py", "newclient.sh", "removeclient.sh"]:
             if os.path.exists(file):
                 zipf.write(file)
-        for root, _, files in os.walk('files'):
+        for root, _, files in os.walk("files"):
             for file in files:
-                zipf.write(os.path.join(root, file), os.path.relpath(os.path.join(root, file), os.getcwd()))
-        for root, _, files in os.walk('users'):
+                zipf.write(
+                    os.path.join(root, file),
+                    os.path.relpath(os.path.join(root, file), os.getcwd()),
+                )
+        for root, _, files in os.walk("users"):
             for file in files:
-                zipf.write(os.path.join(root, file), os.path.relpath(os.path.join(root, file), os.getcwd()))
-    with open(backup_filename, 'rb') as f:
-        await bot.send_document(user_id, f, caption=backup_filename)
+                zipf.write(
+                    os.path.join(root, file),
+                    os.path.relpath(os.path.join(root, file), os.getcwd()),
+                )
+    with open(backup_filename, "rb") as f:
+        await BOT.send_document(user_id, f, caption=backup_filename)
     os.remove(backup_filename)
     await callback_query.answer()
+
 
 @dp.callback_query_handler(lambda c: c.data == "instructions")
 async def show_instructions(callback_query: types.CallbackQuery):
     user_id = callback_query.from_user.id
-    if user_id not in admins and user_id not in moderators:
+    if user_id not in ADMINS and user_id not in MODERATORS:
         await callback_query.answer("Нет прав.", show_alert=True)
         return
     keyboard = InlineKeyboardMarkup(row_width=2).add(
         InlineKeyboardButton("📱 Для мобильных", callback_data="mobile_instructions"),
         InlineKeyboardButton("💻 Для компьютеров", callback_data="pc_instructions"),
-        InlineKeyboardButton("🏠 Домой", callback_data="home")
+        InlineKeyboardButton("🏠 Домой", callback_data="home"),
     )
-    await bot.edit_message_text(
+    await BOT.edit_message_text(
         chat_id=callback_query.message.chat.id,
         message_id=callback_query.message.message_id,
         text="Выберите тип устройства для инструкции:",
-        reply_markup=keyboard
+        reply_markup=keyboard,
     )
     await callback_query.answer()
+
 
 @dp.callback_query_handler(lambda c: c.data == "mobile_instructions")
 async def mobile_instructions(callback_query: types.CallbackQuery):
     user_id = callback_query.from_user.id
-    if user_id not in admins and user_id not in moderators:
+    if user_id not in ADMINS and user_id not in MODERATORS:
         await callback_query.answer("Нет прав.", show_alert=True)
         return
     instruction_text = (
@@ -647,21 +712,22 @@ async def mobile_instructions(callback_query: types.CallbackQuery):
     )
     keyboard = InlineKeyboardMarkup().add(
         InlineKeyboardButton("⬅️ Назад", callback_data="instructions"),
-        InlineKeyboardButton("🏠 Домой", callback_data="home")
+        InlineKeyboardButton("🏠 Домой", callback_data="home"),
     )
-    await bot.edit_message_text(
+    await BOT.edit_message_text(
         chat_id=callback_query.message.chat.id,
         message_id=callback_query.message.message_id,
         text=instruction_text,
         parse_mode="Markdown",
-        reply_markup=keyboard
+        reply_markup=keyboard,
     )
     await callback_query.answer()
+
 
 @dp.callback_query_handler(lambda c: c.data == "pc_instructions")
 async def pc_instructions(callback_query: types.CallbackQuery):
     user_id = callback_query.from_user.id
-    if user_id not in admins and user_id not in moderators:
+    if user_id not in ADMINS and user_id not in MODERATORS:
         await callback_query.answer("Нет прав.", show_alert=True)
         return
     instruction_text = (
@@ -675,70 +741,49 @@ async def pc_instructions(callback_query: types.CallbackQuery):
     )
     keyboard = InlineKeyboardMarkup().add(
         InlineKeyboardButton("⬅️ Назад", callback_data="instructions"),
-        InlineKeyboardButton("🏠 Домой", callback_data="home")
+        InlineKeyboardButton("🏠 Домой", callback_data="home"),
     )
-    await bot.edit_message_text(
+    await BOT.edit_message_text(
         chat_id=callback_query.message.chat.id,
         message_id=callback_query.message.message_id,
         text=instruction_text,
         parse_mode="Markdown",
-        reply_markup=keyboard
+        reply_markup=keyboard,
     )
     await callback_query.answer()
 
-def parse_transfer(transfer_str):
-    if not isinstance(transfer_str, str) or not transfer_str.strip():
-        logger.error(f"Некорректный transfer_str: {transfer_str}")
-        return 0, 0  # Значения по умолчанию
-    try:
-        incoming, outgoing = re.split(r'[/,]', transfer_str)[:2]
-        size_map = {'B': 1, 'KB': 10**3, 'KiB': 1024, 'MB': 10**6, 'MiB': 1024**2, 'GB': 10**9, 'GiB': 1024**3}
-        incoming_bytes = outgoing_bytes = 0
-        for unit, multiplier in size_map.items():
-            if unit in incoming:
-                match = re.match(r'([\d.]+)', incoming)
-                if match:
-                    incoming_bytes = float(match.group(0)) * multiplier
-            if unit in outgoing:
-                match = re.match(r'([\d.]+)', outgoing)
-                if match:
-                    outgoing_bytes = float(match.group(0)) * multiplier
-        return incoming_bytes, outgoing_bytes
-    except Exception as e:
-        logger.error(f"Ошибка в parse_transfer: {str(e)}")
-        return 0, 0  # Значения по умолчанию
-
-async def generate_vpn_key(conf_path: str) -> str:
-    process = await asyncio.create_subprocess_exec(
-        'python3.11', 'awg-decode.py', '--encode', conf_path,
-        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
-    )
-    stdout, stderr = await process.communicate()
-    return stdout.decode().strip() if process.returncode == 0 and stdout.decode().startswith('vpn://') else ""
 
 async def check_environment():
-    if DOCKER_CONTAINER not in subprocess.check_output(f"docker ps --filter 'name={DOCKER_CONTAINER}' --format '{{{{.Names}}}}'", shell=True).decode().strip().split('\n'):
+    if DOCKER_CONTAINER not in subprocess.check_output(
+        f"docker ps --filter 'name={DOCKER_CONTAINER}' --format '{{{{.Names}}}}'",
+        shell=True,
+    ).decode().strip().split("\n"):
         logger.error(f"Контейнер '{DOCKER_CONTAINER}' не найден.")
         return False
-    subprocess.check_call(f"docker exec {DOCKER_CONTAINER} test -f {WG_CONFIG_FILE}", shell=True)
+    subprocess.check_call(
+        f"docker exec {DOCKER_CONTAINER} test -f {WG_CONFIG_FILE}", shell=True
+    )
     return True
 
+
 async def on_startup(dp):
-    os.makedirs('files/connections', exist_ok=True)
-    os.makedirs('users', exist_ok=True)
+    os.makedirs("files/connections", exist_ok=True)
+    os.makedirs("users", exist_ok=True)
     await load_isp_cache()
     if not await check_environment():
-        for admin_id in admins:
-            await bot.send_message(admin_id, "Ошибка инициализации AmneziaVPN.")
-        await bot.close()
+        for admin_id in ADMINS:
+            await BOT.send_message(admin_id, "Ошибка инициализации AmneziaVPN.")
+        await BOT.close()
         sys.exit(1)
     if not db.get_admins():
         logger.error("Список админов пуст.")
         sys.exit(1)
     scheduler.add_job(db.ensure_peer_names, IntervalTrigger(minutes=1))
 
+
 async def on_shutdown(dp):
     scheduler.shutdown()
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     executor.start_polling(dp, on_startup=on_startup, on_shutdown=on_shutdown)

@@ -1,0 +1,8 @@
+/myenv
+/awg/files
+/awg/users
+__pycache__
+install.sh
+awg/newclient.sh
+awg/removeclient.sh
+/.mypy_cache
