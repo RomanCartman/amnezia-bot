@@ -2,6 +2,7 @@ import sys
 import logging
 import db
 from aiogram import Bot
+from aiogram.client.default import DefaultBotProperties
 
 logger = logging.getLogger(__name__)
 
@@ -13,18 +14,21 @@ moderator_ids = setting.get("moderator_ids", [])
 wg_config_file = setting.get("wg_config_file")
 docker_container = setting.get("docker_container")
 endpoint = setting.get("endpoint")
+yookassa_provider_token = setting.get("yookassa_provider_token").strip()
 
 if not all([bot_token, admin_ids, wg_config_file, docker_container, endpoint]):
     logger.error("Некоторые обязательные настройки отсутствуют.")
     sys.exit(1)
 
 # Настройки и объекты
-BOT = Bot(bot_token)
+BOT = Bot(bot_token, default=DefaultBotProperties(parse_mode="HTML"))
 ADMINS = [int(admin_id) for admin_id in admin_ids]
 MODERATORS = [int(mod_id) for mod_id in moderator_ids]
 WG_CONFIG_FILE = wg_config_file
 DOCKER_CONTAINER = docker_container
 ENDPOINT = endpoint
+YOOKASSA_PROVIDER_TOKEN = yookassa_provider_token
+user_main_messages = {}
 
 # Кэш и файлы
 ISP_CACHE_FILE = "files/isp_cache.json"

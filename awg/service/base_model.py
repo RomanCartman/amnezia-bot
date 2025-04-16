@@ -21,6 +21,7 @@ class User(BaseModel):
     name: Optional[str]
     end_date: Optional[str]
     is_unlimited: int
+    has_used_trial: int
 
 
 class Config(BaseModel):

@@ -3,8 +3,7 @@ import sqlite3
 from typing import Literal, Optional, Union
 from dateutil.relativedelta import relativedelta
 
-
-from service.base_model import Config, User
+from service.base_model import User, Config
 
 
 # =====================================================================
@@ -29,7 +28,8 @@ class Database:
                 telegram_id TEXT UNIQUE,
                 name TEXT,
                 end_date TEXT,
-                is_unlimited INTEGER DEFAULT 0
+                is_unlimited INTEGER DEFAULT 0,
+                has_used_trial INTEGER DEFAULT 0
             )
         """
         )
@@ -37,12 +37,35 @@ class Database:
             """
             CREATE TABLE IF NOT EXISTS configs (
                 config_id INTEGER PRIMARY KEY,
-                user_id INTEGER,
+                user_id INTEGER NOT NULL,
+                
+                -- Интерфейс
+                private_key TEXT NOT NULL,
+                address TEXT NOT NULL,
+                dns TEXT,
+
+                jc INTEGER,
+                jmin INTEGER,
+                jmax INTEGER,
+                s1 INTEGER,
+                s2 INTEGER,
+                h1 INTEGER,
+                h2 INTEGER,
+                h3 INTEGER,
+                h4 INTEGER,
+
+                -- Параметры peer'а
                 public_key TEXT NOT NULL,
                 preshared_key TEXT,
-                tunnel_ip TEXT NOT NULL,
+                allowed_ips TEXT,
+                endpoint TEXT,
+                persistent_keepalive INTEGER,
+
+                -- Доп. параметры
+                tunnel_ip TEXT,
                 vpn_url TEXT,
                 wireguard_config TEXT,
+
                 FOREIGN KEY (user_id) REFERENCES users(user_id)
             )
         """
@@ -68,7 +91,11 @@ class Database:
     def get_user_by_telegram_id(self, telegram_id: str) -> Union[User, Literal[False]]:
         """Возвращает пользователя по telegram_id или False, если не найден."""
         self.cursor.execute(
-            "SELECT user_id, telegram_id, name, end_date, is_unlimited FROM users WHERE telegram_id = ?",
+            """
+            SELECT user_id, telegram_id, name, end_date, is_unlimited, has_used_trial
+            FROM users
+            WHERE telegram_id = ?
+            """,
             (telegram_id,),
         )
         row = self.cursor.fetchone()
@@ -80,13 +107,17 @@ class Database:
             name=row[2],
             end_date=row[3],
             is_unlimited=row[4],
+            has_used_trial=row[5],
         )
 
-    def add_user(self, telegram_id, name):
-        """Добавляет нового пользователя по telegram_id, если его нет."""
-        if not self.user_exists(telegram_id):
+    def add_user(self, telegram_id: str, name: str) -> None:
+        """Добавляет нового пользователя, если он ещё не существует."""
+        if not self.get_user_by_telegram_id(telegram_id):
             self.cursor.execute(
-                "INSERT INTO users (telegram_id, name) VALUES (?, ?)",
+                """
+                INSERT INTO users (telegram_id, name, end_date, is_unlimited, has_used_trial)
+                VALUES (?, ?, NULL, 0, 0)
+                """,
                 (telegram_id, name),
             )
             self.conn.commit()
@@ -161,11 +192,17 @@ class Database:
         self.conn.commit()
         return self.cursor.lastrowid  # ID новой конфигурации
 
-    def get_config_by_telegram_id(self, telegram_id) -> Optional[Config]:
-        """Возвращает конфигурацию пользователя по telegram_id."""
+    def get_config_by_telegram_id(self, telegram_id: str) -> Optional[Config]:
+        """Возвращает полную конфигурацию пользователя по telegram_id."""
         self.cursor.execute(
             """
-            SELECT c.config_id, c.user_id, c.public_key, c.preshared_key,
+            SELECT c.config_id, c.user_id,
+                c.private_key, c.address, c.dns,
+                c.jc, c.jmin, c.jmax,
+                c.s1, c.s2,
+                c.h1, c.h2, c.h3, c.h4,
+                c.public_key, c.preshared_key,
+                c.allowed_ips, c.endpoint, c.persistent_keepalive,
                 c.tunnel_ip, c.vpn_url, c.wireguard_config
             FROM configs c
             JOIN users u ON c.user_id = u.user_id
@@ -178,11 +215,26 @@ class Database:
             return Config(
                 config_id=row[0],
                 user_id=row[1],
-                public_key=row[2],
-                preshared_key=row[3],
-                tunnel_ip=row[4],
-                vpn_url=row[5],
-                wireguard_config=row[6],
+                private_key=row[2],
+                address=row[3],
+                dns=row[4],
+                jc=row[5],
+                jmin=row[6],
+                jmax=row[7],
+                s1=row[8],
+                s2=row[9],
+                h1=row[10],
+                h2=row[11],
+                h3=row[12],
+                h4=row[13],
+                public_key=row[14],
+                preshared_key=row[15],
+                allowed_ips=row[16],
+                endpoint=row[17],
+                persistent_keepalive=row[18],
+                tunnel_ip=row[19],
+                vpn_url=row[20],
+                wireguard_config=row[21],
             )
         return None
 
@@ -192,9 +244,11 @@ class Database:
         user = self.get_user_by_telegram_id(telegram_id)
         if not user:
             raise ValueError(f"Пользователь с telegram_id {telegram_id} не найден.")
-        
+
         # Получаем текущую дату окончания
-        self.cursor.execute("SELECT end_date FROM users WHERE user_id = ?", (user.user_id,))
+        self.cursor.execute(
+            "SELECT end_date FROM users WHERE user_id = ?", (user.user_id,)
+        )
         result = self.cursor.fetchone()
 
         if result and result[0]:

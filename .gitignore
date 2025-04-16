@@ -6,3 +6,4 @@ install.sh
 awg/newclient.sh
 awg/removeclient.sh
 /.mypy_cache
+awg/database.db

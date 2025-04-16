@@ -2,16 +2,15 @@ import os
 import subprocess
 import configparser
 import json
-import pytz
 import socket
 import logging
 import tempfile
-from datetime import datetime
+from datetime import datetime, timezone
 
 EXPIRATIONS_FILE = 'files/expirations.json'
 PAYMENTS_FILE = 'files/payments.json'
 ADMINS_FILE = 'files/admins.json'  # Новый файл для хранения админов
-UTC = pytz.UTC
+UTC = timezone.utc
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -213,6 +212,22 @@ def get_clients_from_clients_table():
     except json.JSONDecodeError:
         logger.error("Ошибка при разборе clientsTable JSON.")
         return {}
+
+def get_full_clients_table():
+    setting = get_config()
+    docker_container = setting['docker_container']
+    clients_table_path = '/opt/amnezia/awg/clientsTable'
+    try:
+        cmd = f"docker exec -i {docker_container} cat {clients_table_path}"
+        call = subprocess.check_output(cmd, shell=True)
+        clients_table = json.loads(call.decode('utf-8'))
+        return clients_table
+    except subprocess.CalledProcessError as e:
+        logger.error(f"Ошибка при получении clientsTable: {e}")
+        return []
+    except json.JSONDecodeError:
+        logger.error("Ошибка при разборе clientsTable JSON.")
+        return []
 
 def parse_client_name(full_name):
     return full_name.split('[')[0].strip()
