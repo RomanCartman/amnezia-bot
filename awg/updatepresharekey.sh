@@ -9,7 +9,7 @@ if [ -z "$1" ]; then
 fi
 
 if [ -z "$2" ]; then
-    echo "Error: NEW_PUBLIC_KEY argument is not provided"
+    echo "Error: NEW_PRESHARED_KEY argument is not provided"
     exit 1
 fi
 
@@ -24,7 +24,7 @@ if [ -z "$4" ]; then
 fi
 
 CLIENT_NAME="$1"
-NEW_PUBLIC_KEY="$2"
+NEW_PRESHARED_KEY="$2"
 WG_CONFIG_FILE="$3"
 DOCKER_CONTAINER="$4"
 
@@ -65,8 +65,8 @@ if [ -z "$FOUND_BLOCK_START" ]; then
     exit 1
 fi
 
-# Обновляем ключ
-sed -i "${FOUND_BLOCK_START},${FOUND_BLOCK_END}s|^PublicKey\s*=.*|PublicKey = $NEW_PUBLIC_KEY|" "$SERVER_CONF_PATH"
+# Обновляем PresharedKey
+sed -i "${FOUND_BLOCK_START},${FOUND_BLOCK_END}s|^PresharedKey\s*=.*|PresharedKey = $NEW_PRESHARED_KEY|" "$SERVER_CONF_PATH"
 
 # Копируем файл обратно в контейнер
 docker cp "$SERVER_CONF_PATH" "$DOCKER_CONTAINER:$WG_CONFIG_FILE"
@@ -74,4 +74,4 @@ docker cp "$SERVER_CONF_PATH" "$DOCKER_CONTAINER:$WG_CONFIG_FILE"
 # Перезапуск WireGuard
 docker exec -i "$DOCKER_CONTAINER" sh -c "wg-quick down $WG_CONFIG_FILE || true && wg-quick up $WG_CONFIG_FILE"
 
-echo "PublicKey for $CLIENT_NAME successfully updated"
+echo "PresharedKey for $CLIENT_NAME successfully updated"

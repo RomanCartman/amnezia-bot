@@ -5,6 +5,8 @@ import aiohttp
 import logging
 import aiofiles
 import ipaddress
+import random
+import string
 from aiogram.types import User
 from datetime import datetime, timedelta, timezone
 
@@ -16,7 +18,7 @@ logger = logging.getLogger(__name__)
 def parse_relative_time(relative_str: str) -> datetime:
     if not isinstance(relative_str, str) or not relative_str.strip():
         logger.error(f"Некорректный relative_str: {relative_str}")
-        return datetime.now(timezone.UTC)  # Значение по умолчанию
+        return datetime.now(timezone.utc)  # Значение по умолчанию
     try:
         relative_str = relative_str.lower().replace(" ago", "")
         delta = 0
@@ -33,10 +35,10 @@ def parse_relative_time(relative_str: str) -> datetime:
                 delta += num * 604800
             elif "month" in unit:
                 delta += num * 2592000
-        return datetime.now(timezone.UTC) - timedelta(seconds=delta)
+        return datetime.now(timezone.utc) - timedelta(seconds=delta)
     except Exception as e:
         logger.error(f"Ошибка в parse_relative_time: {str(e)}")
-        return datetime.now(timezone.UTC)  # Значение по умолчанию
+        return datetime.now(timezone.utc)  # Значение по умолчанию
 
 
 def parse_transfer(transfer_str):
@@ -90,7 +92,7 @@ async def save_isp_cache():
 
 
 async def get_isp_info(ip: str) -> str:
-    now = datetime.now(timezone.UTC).timestamp()
+    now = datetime.now(timezone.utc).timestamp()
     if ip in isp_cache and (now - isp_cache[ip]["timestamp"]) < CACHE_TTL:
         return isp_cache[ip]["isp"]
 
@@ -119,3 +121,16 @@ def get_short_name(user: User) -> str:
         name_parts = filter(None, [user.first_name, user.last_name])
         name = " ".join(name_parts)
     return name[:10]
+
+
+def generate_deactivate_presharekey():
+    """"Получаем такую строку Deactivate_kI8vRn0Bps5gM+9yHdLjuV3TQ1rwYOzE="""
+    prefix = "Deactivate_"
+    suffix = "="
+    middle_length = 44 - len(prefix) - len(suffix)  # 32 символа
+
+    chars = string.ascii_letters + string.digits + "/+"
+
+    middle = ''.join(random.choices(chars, k=middle_length))
+
+    return prefix + middle + suffix

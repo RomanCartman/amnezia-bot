@@ -3,7 +3,7 @@ import sqlite3
 from typing import Literal, Optional, Union
 from dateutil.relativedelta import relativedelta
 
-from service.base_model import User, Config
+from service.base_model import Payment, User, Config
 
 
 # =====================================================================
@@ -291,7 +291,7 @@ class Database:
         self.cursor.execute(
             """
             INSERT INTO payments (
-                user_id, amount, months, provider_payment_id, raw_payload, status
+                user_id, amount, months, provider_payment_id, raw_payload, unique_payload, status
             ) VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
             (
@@ -307,13 +307,45 @@ class Database:
         self.conn.commit()
         return self.cursor.lastrowid
 
-    def update_payment_status(self, unique_payload, new_status):
-        """Обновляет статус платежа по unique_payload."""
+    def update_payment_status(self, unique_payload, new_status) -> Optional[Payment]:
+        """
+        Обновляет статус платежа по unique_payload.
+        Возвращает обновлённый объект Payment, если успешно, иначе None.
+        """
         self.cursor.execute(
             "UPDATE payments SET status = ? WHERE unique_payload = ?",
             (new_status, unique_payload),
         )
         self.conn.commit()
+
+        if self.cursor.rowcount == 0:
+            return None
+
+        # Получаем обновлённый платёж
+        self.cursor.execute(
+            """
+            SELECT payment_id, user_id, amount, months, provider_payment_id,
+                payment_time, raw_payload, status, unique_payload
+            FROM payments
+            WHERE unique_payload = ?
+            """,
+            (unique_payload,)
+        )
+        row = self.cursor.fetchone()
+        if row:
+            return Payment(
+                payment_id=row[0],
+                user_id=row[1],
+                amount=row[2],
+                months=row[3],
+                provider_payment_id=row[4],
+                payment_time=row[5],
+                raw_payload=row[6],
+                status=row[7],
+                unique_payload=row[8],
+            )
+        return None
+
 
     def close(self):
         """Закрывает соединение с базой данных."""

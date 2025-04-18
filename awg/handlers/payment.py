@@ -1,12 +1,18 @@
-import logging
+import os
+import db
 import uuid
+import logging
+
 from aiogram import Router, F
 from aiogram.types import LabeledPrice, PreCheckoutQuery, Message
 from aiogram.enums import ContentType
 from aiogram.types import CallbackQuery
+
 from keyboard.menu import get_extend_subscription_keyboard
+from service.generate_vpn_key import generate_vpn_key
 from service.db_instance import user_db
-from settings import YOOKASSA_PROVIDER_TOKEN
+from aiogram.types import Message, FSInputFile
+from settings import BOT, YOOKASSA_PROVIDER_TOKEN
 
 
 logger = logging.getLogger(__name__)
@@ -94,8 +100,58 @@ async def pre_checkout(pre_checkout_query: PreCheckoutQuery):
 @router.message(F.content_type == ContentType.SUCCESSFUL_PAYMENT)
 async def successful_payment(message: Message):
     payment = message.successful_payment
-    if payment is None or payment.invoice_payload is None:
+    if payment is None or payment.invoice_payload is None or message.from_user is None:
         await message.answer("Ошибка оплаты")
         return
+    unique_payload = payment.invoice_payload
+    telegram_id = message.from_user.id
+
     logger.info(f"💰 Успешная оплата {payment.invoice_payload}")
-    await message.answer("✅ Спасибо за покупку! Подписка активирована.")
+
+    try:
+        # Обновляем статус платежа
+        updated_payment = user_db.update_payment_status(unique_payload, new_status="success")
+        if not updated_payment:
+            await message.answer("Не удалось обновить статус оплаты.")
+            return
+        
+        # Продлеваем подписку
+        months = updated_payment.months
+        updated_user = user_db.update_user_end_date(telegram_id, months_to_add=months)
+
+        await message.answer("✅ Спасибо за покупку! Подписка активирована.")
+        logger.info(f"🔁 Подписка продлена на {months} мес. для {telegram_id}")
+
+        # Проверка конфигурации
+        config = user_db.get_config_by_telegram_id(str(telegram_id))
+        if not config:
+            await message.answer("⚙️ Генерируем VPN-конфигурацию...")
+
+            success = db.root_add(str(telegram_id), ipv6=False)
+            if success:
+                conf_path = os.path.join("users", str(telegram_id), f"{telegram_id}.conf")
+                if os.path.exists(conf_path):
+                    vpn_key = await generate_vpn_key(conf_path)
+                    caption = (
+                        f"Конфигурация для {telegram_id}:\n"
+                        f"AmneziaVPN:\n"
+                        f"[Google Play](https://play.google.com/store/apps/details?id=org.amnezia.vpn&hl=ru)\n"
+                        f"[GitHub](https://github.com/amnezia-vpn/amnezia-client)\n"
+                        f"```\n{vpn_key}\n```"
+                    )
+                    config_file = FSInputFile(conf_path)
+                    config_message = await BOT.send_document(
+                        telegram_id, config_file, caption=caption, parse_mode="Markdown"
+                    )
+                    await BOT.pin_chat_message(
+                        telegram_id, config_message.message_id, disable_notification=True
+                    )
+                else:
+                    await message.answer("❌ Не удалось найти сгенерированный конфиг-файл.")
+            else:
+                await message.answer("❌ Не удалось создать конфигурацию. Обратитесь в поддержку.")
+        else:
+            await message.answer("🛡 У вас уже есть активная конфигурация.")
+    except Exception as e:
+        logger.error(f"❌ Ошибка при обработке успешной оплаты: {e}")
+        await message.answer("Произошла ошибка при активации подписки. Свяжитесь с поддержкой.")

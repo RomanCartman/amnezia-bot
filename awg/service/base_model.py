@@ -53,3 +53,15 @@ class Config(BaseModel):
     tunnel_ip: Optional[str]
     vpn_url: Optional[str]
     wireguard_config: Optional[str]
+
+
+class Payment(BaseModel):
+    payment_id: Optional[int]  # PRIMARY KEY AUTOINCREMENT, может быть None при создании
+    user_id: int               # Внешний ключ на users(user_id)
+    amount: int
+    months: int
+    provider_payment_id: str
+    payment_time: Optional[str] = None  # DEFAULT CURRENT_TIMESTAMP, может быть установлено БД
+    raw_payload: Optional[str] = None
+    status: Optional[str] = 'pending'   # DEFAULT 'pending'
+    unique_payload: Optional[str] = None
