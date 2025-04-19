@@ -180,6 +180,7 @@ def save_client_endpoint(username, endpoint):
         json.dump(data, f)
 
 def root_add(id_user, ipv6=False):
+    logger.info(f"➕ root_add - {id_user}")
     setting = get_config()
     endpoint = setting['endpoint']
     wg_config_file = setting['wg_config_file']

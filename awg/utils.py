@@ -7,9 +7,9 @@ import aiofiles
 import ipaddress
 import random
 import string
-from aiogram.types import User
 from datetime import datetime, timedelta, timezone
 
+from service.base_model import User
 from settings import CACHE_TTL, ISP_CACHE_FILE, WG_CONFIG_FILE
 
 logger = logging.getLogger(__name__)
@@ -134,3 +134,44 @@ def generate_deactivate_presharekey():
     middle = ''.join(random.choices(chars, k=middle_length))
 
     return prefix + middle + suffix
+
+def get_profile_text(user: User):
+    """
+    Возвращает текст профиля пользователя с учётом статуса подписки и пробного периода.
+    """
+    trial_text = ""
+    
+    # Проверка подписки
+    if user.is_unlimited:
+        subscription_text = "♾️ Безлимитная"
+    
+    elif user.end_date:
+        try:
+            end_date_obj = datetime.strptime(user.end_date, "%Y-%m-%d")
+            end_date_str = end_date_obj.strftime("%d.%m.%Y")
+        except Exception:
+            end_date_obj = None
+            end_date_str = user.end_date  # если не удалось распарсить
+        
+        if end_date_obj and end_date_obj < datetime.now():
+            subscription_text = f"❌ Подписка закончилась {end_date_str}"
+        else:
+            subscription_text = f"📅 Активна до {end_date_str}"
+            trial_text = f"🧪 Пробный период: {'использован' if user.has_used_trial else 'доступен'}"
+    
+    else:
+        subscription_text = "❌ Нет активной подписки"
+        trial_text = f"🧪 Пробный период: {'использован' if user.has_used_trial else 'доступен'}"
+
+    # Сборка текста профиля
+    profile_text = (
+        f"👤 *Ваш профиль*\n\n"
+        f"🆔 ID: `{user.telegram_id}`\n"
+        f"👥 Имя: *{user.name}*\n"
+        f"{subscription_text}\n"
+    )
+
+    if trial_text:
+        profile_text += f"{trial_text}"
+
+    return profile_text

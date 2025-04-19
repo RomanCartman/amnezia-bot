@@ -61,10 +61,9 @@ class Database:
                 endpoint TEXT,
                 persistent_keepalive INTEGER,
 
-                -- Доп. параметры
-                tunnel_ip TEXT,
-                vpn_url TEXT,
-                wireguard_config TEXT,
+                -- deactivate_presharekey
+
+                deactivate_presharekey TEXT,
 
                 FOREIGN KEY (user_id) REFERENCES users(user_id)
             )
@@ -162,11 +161,24 @@ class Database:
     def add_config(
         self,
         telegram_id: str,
+        private_key: str,
+        address: str,
+        dns: Optional[str],
+        jc: Optional[int],
+        jmin: Optional[int],
+        jmax: Optional[int],
+        s1: Optional[int],
+        s2: Optional[int],
+        h1: Optional[int],
+        h2: Optional[int],
+        h3: Optional[int],
+        h4: Optional[int],
         public_key: str,
         preshared_key: Optional[str],
-        tunnel_ip: str,
-        vpn_url: Optional[str],
-        wireguard_config: Optional[str],
+        allowed_ips: Optional[str],
+        endpoint: Optional[str],
+        persistent_keepalive: Optional[int],
+        deactivate_presharekey: Optional[str],
     ) -> int:
         """Добавляет VPN-конфигурацию пользователя по telegram_id."""
 
@@ -177,16 +189,34 @@ class Database:
         self.cursor.execute(
             """
             INSERT INTO configs (
-                user_id, public_key, preshared_key, tunnel_ip, vpn_url, wireguard_config
-            ) VALUES (?, ?, ?, ?, ?, ?)
+                user_id, private_key, address, dns,
+                jc, jmin, jmax, s1, s2,
+                h1, h2, h3, h4,
+                public_key, preshared_key,
+                allowed_ips, endpoint, persistent_keepalive,
+                deactivate_presharekey
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 user.user_id,
+                private_key,
+                address,
+                dns,
+                jc,
+                jmin,
+                jmax,
+                s1,
+                s2,
+                h1,
+                h2,
+                h3,
+                h4,
                 public_key,
                 preshared_key,
-                tunnel_ip,
-                vpn_url,
-                wireguard_config,
+                allowed_ips,
+                endpoint,
+                persistent_keepalive,
+                deactivate_presharekey,
             ),
         )
         self.conn.commit()
@@ -203,7 +233,7 @@ class Database:
                 c.h1, c.h2, c.h3, c.h4,
                 c.public_key, c.preshared_key,
                 c.allowed_ips, c.endpoint, c.persistent_keepalive,
-                c.tunnel_ip, c.vpn_url, c.wireguard_config
+                c.deactivate_presharekey
             FROM configs c
             JOIN users u ON c.user_id = u.user_id
             WHERE u.telegram_id = ?
@@ -232,13 +262,13 @@ class Database:
                 allowed_ips=row[16],
                 endpoint=row[17],
                 persistent_keepalive=row[18],
-                tunnel_ip=row[19],
-                vpn_url=row[20],
-                wireguard_config=row[21],
+                deactivate_presharekey=row[19],
             )
         return None
 
-    def update_user_end_date(self, telegram_id, months_to_add) -> Union[User, bool]:
+    def update_user_end_date(
+        self, telegram_id: str, months_to_add: int
+    ) -> Union[User, bool]:
         """Продлевает подписку пользователя на указанное количество месяцев."""
 
         user = self.get_user_by_telegram_id(telegram_id)
@@ -307,14 +337,20 @@ class Database:
         self.conn.commit()
         return self.cursor.lastrowid
 
-    def update_payment_status(self, unique_payload, new_status) -> Optional[Payment]:
+    def update_payment_status(
+        self, raw_payload: str, unique_payload: str, new_status: str
+    ) -> Optional[Payment]:
         """
-        Обновляет статус платежа по unique_payload.
+        Обновляет unique_payload и статус платежа по raw_payload.
         Возвращает обновлённый объект Payment, если успешно, иначе None.
         """
         self.cursor.execute(
-            "UPDATE payments SET status = ? WHERE unique_payload = ?",
-            (new_status, unique_payload),
+            """
+            UPDATE payments
+            SET unique_payload = ?, status = ?
+            WHERE raw_payload = ?
+            """,
+            (unique_payload, new_status, raw_payload),
         )
         self.conn.commit()
 
@@ -327,9 +363,9 @@ class Database:
             SELECT payment_id, user_id, amount, months, provider_payment_id,
                 payment_time, raw_payload, status, unique_payload
             FROM payments
-            WHERE unique_payload = ?
+            WHERE raw_payload = ?
             """,
-            (unique_payload,)
+            (raw_payload,),
         )
         row = self.cursor.fetchone()
         if row:
@@ -345,7 +381,6 @@ class Database:
                 unique_payload=row[8],
             )
         return None
-
 
     def close(self):
         """Закрывает соединение с базой данных."""

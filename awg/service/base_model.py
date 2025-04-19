@@ -49,10 +49,7 @@ class Config(BaseModel):
     endpoint: Optional[str]
     persistent_keepalive: Optional[int]
 
-    # Дополнительные параметры для сервиса
-    tunnel_ip: Optional[str]
-    vpn_url: Optional[str]
-    wireguard_config: Optional[str]
+    deactivate_presharekey: Optional[str]
 
 
 class Payment(BaseModel):
@@ -60,7 +57,7 @@ class Payment(BaseModel):
     user_id: int               # Внешний ключ на users(user_id)
     amount: int
     months: int
-    provider_payment_id: str
+    provider_payment_id: Optional[str] = None
     payment_time: Optional[str] = None  # DEFAULT CURRENT_TIMESTAMP, может быть установлено БД
     raw_payload: Optional[str] = None
     status: Optional[str] = 'pending'   # DEFAULT 'pending'
