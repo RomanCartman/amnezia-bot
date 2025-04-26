@@ -1,9 +1,12 @@
+import logging
 from datetime import datetime, timedelta
 import sqlite3
-from typing import Literal, Optional, Union
+from typing import List, Literal, Optional, Union
 from dateutil.relativedelta import relativedelta
 
-from service.base_model import Payment, User, Config
+from service.base_model import Payment, UserData, Config
+
+logger = logging.getLogger(__name__)
 
 
 # =====================================================================
@@ -87,7 +90,9 @@ class Database:
         )
         self.conn.commit()
 
-    def get_user_by_telegram_id(self, telegram_id: str) -> Union[User, Literal[False]]:
+    def get_user_by_telegram_id(
+        self, telegram_id: str
+    ) -> Union[UserData, Literal[False]]:
         """Возвращает пользователя по telegram_id или False, если не найден."""
         self.cursor.execute(
             """
@@ -100,7 +105,29 @@ class Database:
         row = self.cursor.fetchone()
         if not row:
             return False
-        return User(
+        return UserData(
+            user_id=row[0],
+            telegram_id=row[1],
+            name=row[2],
+            end_date=row[3],
+            is_unlimited=row[4],
+            has_used_trial=row[5],
+        )
+
+    def get_user_by_user_id(self, user_id: int) -> Union[UserData, Literal[False]]:
+        """Возвращает пользователя по user_id или False, если не найден."""
+        self.cursor.execute(
+            """
+            SELECT user_id, telegram_id, name, end_date, is_unlimited, has_used_trial
+            FROM users
+            WHERE user_id = ?
+            """,
+            (user_id,),
+        )
+        row = self.cursor.fetchone()
+        if not row:
+            return False
+        return UserData(
             user_id=row[0],
             telegram_id=row[1],
             name=row[2],
@@ -140,7 +167,7 @@ class Database:
             return datetime.strptime(end_date, "%Y-%m-%d") > datetime.now()
         return False
 
-    def get_users_expired_yesterday(self):
+    def get_users_expired_yesterday(self) -> List[UserData]:
         """Возвращает список пользователей, у которых подписка закончилась вчера,
         is_unlimited != 1 и end_date не NULL.
         """
@@ -148,15 +175,53 @@ class Database:
 
         self.cursor.execute(
             """
-            SELECT user_id, telegram_id, name, end_date
+            SELECT user_id, telegram_id, name, end_date, is_unlimited, has_used_trial
             FROM users
             WHERE is_unlimited != 1
             AND end_date IS NOT NULL
-            AND end_date = ?
+            AND end_date <= ?
             """,
             (yesterday,),
         )
-        return self.cursor.fetchall()
+        logger.info(f"yesterday: {yesterday}")
+        return [
+            UserData(
+                user_id=row[0],
+                telegram_id=row[1],
+                name=row[2],
+                end_date=row[3],
+                is_unlimited=row[4],
+                has_used_trial=row[5],
+            )
+            for row in self.cursor.fetchall()
+        ]
+
+    def get_active_users(self) -> List[UserData]:
+        """Возвращает список пользователей с is_unlimited = 1 или у кого end_date сегодня или в будущем."""
+        today = datetime.now().strftime("%Y-%m-%d")
+
+        self.cursor.execute(
+            """
+            SELECT user_id, telegram_id, name, end_date, is_unlimited, has_used_trial
+            FROM users
+            WHERE is_unlimited = 1
+            OR (end_date IS NOT NULL AND end_date >= ?)
+            """,
+            (today,),
+        )
+
+        rows = self.cursor.fetchall()
+        return [
+            UserData(
+                user_id=row[0],
+                telegram_id=row[1],
+                name=row[2],
+                end_date=row[3],
+                is_unlimited=row[4],
+                has_used_trial=row[5],
+            )
+            for row in rows
+        ]
 
     def add_config(
         self,
@@ -268,7 +333,7 @@ class Database:
 
     def update_user_end_date(
         self, telegram_id: str, months_to_add: int
-    ) -> Union[User, bool]:
+    ) -> Union[UserData, bool]:
         """Продлевает подписку пользователя на указанное количество месяцев."""
 
         user = self.get_user_by_telegram_id(telegram_id)

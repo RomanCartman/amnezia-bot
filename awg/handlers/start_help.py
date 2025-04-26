@@ -1,6 +1,7 @@
 import logging
 from aiogram import Router
 
+from service.user_vpn_check import update_vpn_state
 from service.db_instance import user_db
 from utils import get_short_name
 from keyboard.menu import get_main_menu_markup, get_user_main_menu
@@ -30,7 +31,7 @@ async def help_command_handler(message: Message):
         }
     else:
         name = get_short_name(message.from_user)
-        user_db.add_user(user_id, name)
+        user_db.add_user(str(user_id), name)
         try:
             photo = FSInputFile("logo.png")
             await message.answer_photo(

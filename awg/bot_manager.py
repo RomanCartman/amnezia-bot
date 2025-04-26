@@ -26,14 +26,15 @@ dp = Dispatcher(storage=MemoryStorage())
 router = Router()
 scheduler = AsyncIOScheduler(timezone=ZoneInfo("UTC"))
 
-# dp.message.middleware(AdminMessageDeletionMiddleware(admins=ADMINS))
-
 
 # 🚀 Запуск
 async def main():
     dp.include_router(start_help.router)
     dp.include_router(payment.router)
     dp.include_router(user_actions.router)
+
+    dp.message.middleware(AdminMessageDeletionMiddleware(admins=ADMINS))
+
     scheduler.start()
     await dp.start_polling(BOT)
 

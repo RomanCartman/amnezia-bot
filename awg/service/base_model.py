@@ -15,7 +15,7 @@ class YoomoneyModel(BaseModel):
     order_info: str | None
 
 
-class User(BaseModel):
+class UserData(BaseModel):
     user_id: int
     telegram_id: str
     name: Optional[str]

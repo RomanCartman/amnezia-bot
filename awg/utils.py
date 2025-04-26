@@ -1,3 +1,4 @@
+import base64
 import json
 import os
 import re
@@ -9,7 +10,8 @@ import random
 import string
 from datetime import datetime, timedelta, timezone
 
-from service.base_model import User
+from aiogram.types import User
+from service.base_model import UserData
 from settings import CACHE_TTL, ISP_CACHE_FILE, WG_CONFIG_FILE
 
 logger = logging.getLogger(__name__)
@@ -124,27 +126,38 @@ def get_short_name(user: User) -> str:
 
 
 def generate_deactivate_presharekey():
-    """"Получаем такую строку Deactivate_kI8vRn0Bps5gM+9yHdLjuV3TQ1rwYOzE="""
-    prefix = "Deactivate_"
-    suffix = "="
-    middle_length = 44 - len(prefix) - len(suffix)  # 32 символа
+    """ "Получаем мусорную строку"""
+    fixed_prefix = b"Deactivate"  # 10 байт
+    total_bytes = 32  # WireGuard требует ровно 32 байта
+    random_part_length = total_bytes - len(fixed_prefix)
 
-    chars = string.ascii_letters + string.digits + "/+"
+    if random_part_length < 0:
+        raise ValueError("Prefix is too long for a 32-byte key")
 
-    middle = ''.join(random.choices(chars, k=middle_length))
+    random_part = os.urandom(random_part_length)
+    full_bytes = fixed_prefix + random_part
 
-    return prefix + middle + suffix
+    # Закодировать в Base64 и убрать паддинги "="
+    base64_key = base64.b64encode(full_bytes).decode()
 
-def get_profile_text(user: User):
+    if len(base64_key) != 44:
+        raise ValueError(
+            f"Resulting Base64 key is not 44 characters long: {len(base64_key)}"
+        )
+
+    return base64_key
+
+
+def get_profile_text(user: UserData):
     """
     Возвращает текст профиля пользователя с учётом статуса подписки и пробного периода.
     """
     trial_text = ""
-    
+
     # Проверка подписки
     if user.is_unlimited:
         subscription_text = "♾️ Безлимитная"
-    
+
     elif user.end_date:
         try:
             end_date_obj = datetime.strptime(user.end_date, "%Y-%m-%d")
@@ -152,16 +165,17 @@ def get_profile_text(user: User):
         except Exception:
             end_date_obj = None
             end_date_str = user.end_date  # если не удалось распарсить
-        
+
         if end_date_obj and end_date_obj < datetime.now():
             subscription_text = f"❌ Подписка закончилась {end_date_str}"
         else:
             subscription_text = f"📅 Активна до {end_date_str}"
-            trial_text = f"🧪 Пробный период: {'использован' if user.has_used_trial else 'доступен'}"
-    
+
     else:
         subscription_text = "❌ Нет активной подписки"
-        trial_text = f"🧪 Пробный период: {'использован' if user.has_used_trial else 'доступен'}"
+        trial_text = (
+            f"🧪 Пробный период: {'использован' if user.has_used_trial else 'доступен'}"
+        )
 
     # Сборка текста профиля
     profile_text = (

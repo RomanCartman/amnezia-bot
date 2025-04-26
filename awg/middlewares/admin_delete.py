@@ -6,6 +6,7 @@ import asyncio
 from settings import BOT
 
 class AdminMessageDeletionMiddleware(BaseMiddleware):
+    """middleware для удаления сообщений админов"""
     def __init__(self, admins: list):
         self.admins = admins
         super().__init__()
