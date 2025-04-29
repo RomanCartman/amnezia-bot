@@ -223,6 +223,34 @@ class Database:
             for row in rows
         ]
 
+    def get_users_expiring_in_days(self, days: List[int]) -> List[UserData]:
+        """Возвращает список пользователей, у которых подписка заканчивается через указанные дни."""
+        target_dates = [
+            (datetime.now() + timedelta(days=day)).strftime("%Y-%m-%d") for day in days
+        ]
+
+        query = f"""
+            SELECT user_id, telegram_id, name, end_date, is_unlimited, has_used_trial
+            FROM users
+            WHERE is_unlimited != 1
+            AND end_date IS NOT NULL
+            AND end_date IN ({','.join('?' for _ in target_dates)})
+        """
+
+        self.cursor.execute(query, target_dates)
+
+        return [
+            UserData(
+                user_id=row[0],
+                telegram_id=row[1],
+                name=row[2],
+                end_date=row[3],
+                is_unlimited=row[4],
+                has_used_trial=row[5],
+            )
+            for row in self.cursor.fetchall()
+        ]
+
     def add_config(
         self,
         telegram_id: str,
