@@ -1,5 +1,6 @@
 import logging
 import asyncio
+from time import timezone
 from zoneinfo import ZoneInfo
 from aiogram import Router, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
@@ -40,8 +41,9 @@ async def main():
     scheduler.add_job(
         daily_check_end_date_and_notify,
         trigger="cron",
-        hour=10,  # каждый день в 10:00 утра
-        minute=0,
+        hour=9,  # каждый день в 10:00 утра
+        minute=28,
+        timezone=ZoneInfo('Europe/Moscow')
     )
 
     scheduler.add_job(
@@ -49,6 +51,7 @@ async def main():
         trigger="cron",
         hour=9,  # каждый день в 9:00 утра
         minute=0,
+        timezone=ZoneInfo('Europe/Moscow')
     )
 
     scheduler.start()
