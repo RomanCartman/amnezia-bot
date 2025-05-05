@@ -1,13 +1,13 @@
 import logging
-from aiogram import Router
+from aiogram import Router, F
 
-from service.user_vpn_check import update_vpn_state
 from service.db_instance import user_db
 from utils import get_short_name
 from keyboard.menu import get_main_menu_markup, get_user_main_menu
 from aiogram.filters import Command
-from aiogram.types import Message, FSInputFile
-from settings import ADMINS, MODERATORS, user_main_messages
+from aiogram.types import Message, FSInputFile, CallbackQuery
+from admin_service.admin import is_privileged
+from settings import ADMINS
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -20,15 +20,10 @@ async def help_command_handler(message: Message):
         return
     user_id = message.from_user.id
 
-    if user_id in ADMINS or user_id in MODERATORS:
-        sent_message = await message.answer(
+    if is_privileged(user_id):
+        await message.answer(
             "Выберите действие:", reply_markup=get_main_menu_markup(user_id, ADMINS)
         )
-        user_main_messages[user_id] = {
-            "chat_id": sent_message.chat.id,
-            "message_id": sent_message.message_id,
-            "state": None,  # Инициализируем state явно
-        }
     else:
         name = get_short_name(message.from_user)
         user_db.add_user(str(user_id), name)
@@ -46,3 +41,40 @@ async def help_command_handler(message: Message):
                 "👋 Добро пожаловать!\n\nВыберите действие:",
                 reply_markup=get_user_main_menu(),
             )
+
+
+@router.callback_query(F.data == "home")
+async def home_callback_handler(callback: CallbackQuery):
+    user = callback.from_user
+    if user is None:
+        await callback.answer("Ошибка: пользователь не определён.", show_alert=True)
+        return
+
+    user_id = user.id
+
+    if not isinstance(callback.message, Message):
+        await callback.answer("Ошибка: сообщение недоступно.", show_alert=True)
+        return
+
+    if is_privileged(user_id):
+        await callback.message.edit_text(
+            text="Выберите действие:",
+            reply_markup=get_main_menu_markup(user_id, ADMINS),
+        )
+    else:
+        try:
+            photo = FSInputFile("logo.png")
+            await callback.message.answer_photo(
+                photo=photo,
+                caption="👋 Добро пожаловать в *VPN Бот!*\n\nВыберите действие:",
+                parse_mode="Markdown",
+                reply_markup=get_user_main_menu(),
+            )
+        except Exception as e:
+            logger.error(f"Ошибка при отображении главного меню: {e}", exc_info=True)
+            await callback.message.edit_text(
+                text="👋 Добро пожаловать!\n\nВыберите действие:",
+                reply_markup=get_user_main_menu(),
+            )
+
+    await callback.answer()

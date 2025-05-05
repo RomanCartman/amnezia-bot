@@ -28,7 +28,6 @@ WG_CONFIG_FILE = wg_config_file
 DOCKER_CONTAINER = docker_container
 ENDPOINT = endpoint
 YOOKASSA_PROVIDER_TOKEN = yookassa_provider_token
-user_main_messages = {}
 
 # Кэш и файлы
 ISP_CACHE_FILE = "files/isp_cache.json"

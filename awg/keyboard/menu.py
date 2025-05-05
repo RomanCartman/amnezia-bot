@@ -2,24 +2,46 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 
 def get_main_menu_markup(user_id, admins):
-    markup = InlineKeyboardMarkup(row_width=2)
-    markup.add(
-        InlineKeyboardButton("➕ Добавить пользователя", callback_data="add_user"),
-        InlineKeyboardButton("📋 Список клиентов", callback_data="list_users"),
-    )
-    markup.add(
-        InlineKeyboardButton("🔑 Получить конфиг", callback_data="get_config"),
-        InlineKeyboardButton("ℹ️ Инструкция", callback_data="instructions"),
-    )
+    buttons = [
+        [
+            InlineKeyboardButton(
+                text="➕ Добавить пользователя", callback_data="add_user"
+            ),
+            InlineKeyboardButton(text="📋 Список клиентов", callback_data="list_users"),
+        ],
+        [
+            InlineKeyboardButton(text="🔑 Получить конфиг", callback_data="get_config"),
+            InlineKeyboardButton(text="ℹ️ Инструкция", callback_data="instructions"),
+        ],
+    ]
+
     if user_id in admins:
-        markup.add(
-            InlineKeyboardButton("👥 Список админов", callback_data="list_admins"),
-            InlineKeyboardButton("👤 Добавить админа", callback_data="add_admin"),
+        buttons.append(
+            [
+                InlineKeyboardButton(
+                    text="👥 Список админов", callback_data="list_admins"
+                ),
+                InlineKeyboardButton(
+                    text="👤 Добавить админа", callback_data="add_admin"
+                ),
+            ]
         )
-        markup.add(
-            InlineKeyboardButton("💾 Создать бекап", callback_data="create_backup")
+        buttons.append(
+            [
+                InlineKeyboardButton(
+                    text="💾 Создать бекап", callback_data="create_backup"
+                ),
+            ]
         )
-    return markup
+
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def get_home_keyboard() -> InlineKeyboardMarkup:
+    """Клавиатура с кнопкой 'Домой'."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[[InlineKeyboardButton(text="🏠 Домой", callback_data="home")]]
+    )
 
 
 def get_client_profile_keyboard(username: str) -> InlineKeyboardMarkup:

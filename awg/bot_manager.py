@@ -7,7 +7,7 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from service.user_vpn_check import update_vpn_state
 from service.notifier import daily_check_end_date_and_notify
-from handlers import payment, user_actions, start_help
+from handlers import payment, user_actions, start_help, admin_actions
 from middlewares.admin_delete import AdminMessageDeletionMiddleware
 from settings import (
     BOT,
@@ -35,6 +35,7 @@ async def main():
     dp.include_router(start_help.router)
     dp.include_router(payment.router)
     dp.include_router(user_actions.router)
+    dp.include_router(admin_actions.router)
 
     dp.message.middleware(AdminMessageDeletionMiddleware(admins=ADMINS))
 
@@ -43,7 +44,7 @@ async def main():
         trigger="cron",
         hour=9,  # каждый день в 10:00 утра
         minute=28,
-        timezone=ZoneInfo('Europe/Moscow')
+        timezone=ZoneInfo("Europe/Moscow"),
     )
 
     scheduler.add_job(
@@ -51,7 +52,7 @@ async def main():
         trigger="cron",
         hour=9,  # каждый день в 9:00 утра
         minute=0,
-        timezone=ZoneInfo('Europe/Moscow')
+        timezone=ZoneInfo("Europe/Moscow"),
     )
 
     scheduler.start()

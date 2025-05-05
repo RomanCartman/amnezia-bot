@@ -298,73 +298,6 @@ async def client_selected_callback(callback_query: types.CallbackQuery):
         await callback_query.answer("Ошибка на сервере.", show_alert=True)
 
 
-@dp.callback_query_handler(lambda c: c.data == "list_users")
-async def list_users_callback(callback_query: types.CallbackQuery):
-    user_id = callback_query.from_user.id
-    if user_id not in ADMINS and user_id not in MODERATORS:
-        await callback_query.answer("Нет прав.", show_alert=True)
-        return
-
-    try:
-        logger.info("Запуск list_users_callback")
-        clients = db.get_client_list()
-        logger.info(f"Клиенты: {clients}")
-        if not clients:
-            await BOT.edit_message_text(
-                chat_id=callback_query.message.chat.id,
-                message_id=callback_query.message.message_id,
-                text="Список клиентов пуст.",
-                reply_markup=InlineKeyboardMarkup().add(
-                    InlineKeyboardButton("🏠 Домой", callback_data="home")
-                ),
-            )
-            await callback_query.answer()
-            return
-
-        keyboard = InlineKeyboardMarkup(row_width=2)
-        active_clients = {client[0]: client[1] for client in db.get_active_list()}
-        logger.info(f"Активные клиенты: {active_clients}")
-        now = datetime.now(pytz.UTC)
-
-        for client in clients:
-            username = client[0]
-            last_handshake = active_clients.get(username)
-            logger.info(f"Клиент: {username}, last_handshake: {last_handshake}")
-            # Упрощённая логика статуса для теста
-            status = (
-                "❌"
-                if not last_handshake
-                or last_handshake.lower() in ["never", "нет данных", "-"]
-                else "🟢"
-            )
-            button_text = f"{status} {username}"
-            keyboard.insert(
-                InlineKeyboardButton(button_text, callback_data=f"client_{username}")
-            )
-
-        keyboard.add(InlineKeyboardButton("🏠 Домой", callback_data="home"))
-
-        await BOT.edit_message_text(
-            chat_id=callback_query.message.chat.id,
-            message_id=callback_query.message.message_id,
-            text="Выберите пользователя:",
-            reply_markup=keyboard,
-        )
-        await callback_query.answer()
-
-    except Exception as e:
-        logger.error(f"Ошибка в list_users_callback: {str(e)}")
-        await BOT.edit_message_text(
-            chat_id=callback_query.message.chat.id,
-            message_id=callback_query.message.message_id,
-            text=f"Ошибка: {str(e)}",
-            reply_markup=InlineKeyboardMarkup().add(
-                InlineKeyboardButton("🏠 Домой", callback_data="home")
-            ),
-        )
-        await callback_query.answer("Ошибка на сервере.", show_alert=True)
-
-
 @dp.callback_query_handler(lambda c: c.data == "list_admins")
 async def list_admins_callback(callback_query: types.CallbackQuery):
     user_id = callback_query.from_user.id
@@ -503,20 +436,6 @@ async def client_delete_callback(callback_query: types.CallbackQuery):
     await callback_query.answer()
 
 
-@dp.callback_query_handler(lambda c: c.data == "home")
-async def return_home(callback_query: types.CallbackQuery):
-    user_id = callback_query.from_user.id
-    if user_id not in ADMINS and user_id not in MODERATORS:
-        await callback_query.answer("Нет прав.", show_alert=True)
-        return
-    user_main_messages[user_id]["state"] = None
-    await BOT.edit_message_text(
-        chat_id=callback_query.message.chat.id,
-        message_id=callback_query.message.message_id,
-        text="Выберите действие:",
-        reply_markup=get_main_menu_markup(user_id, ADMINS),
-    )
-    await callback_query.answer()
 
 
 @dp.callback_query_handler(lambda c: c.data == "get_config")
