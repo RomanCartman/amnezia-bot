@@ -359,9 +359,10 @@ def get_active_list() -> Dict[str, ActiveClient]:
             elif line.startswith("transfer:") and "public_key" in current_peer:
                 current_peer["transfer"] = line.split("transfer: ")[1].strip()
             elif line == "" and "public_key" in current_peer:
-                last_handshake = current_peer.get("latest_handshake", "").lower()
+                last_handshake_raw = current_peer.get("latest_handshake")
+                last_handshake = last_handshake_raw.lower() if last_handshake_raw else ""
                 if last_handshake not in ["never", "нет данных", "-"]:
-                    peer_public_key = current_peer.get("public_key")
+                    peer_public_key = current_peer.get("public_key") or ""
                     if peer_public_key in client_key_map:
                         username = client_key_map[peer_public_key]
                         last_time = current_peer.get("latest_handshake", "Нет данных")
@@ -369,16 +370,17 @@ def get_active_list() -> Dict[str, ActiveClient]:
                         endpoint = current_peer.get("endpoint", "Нет данных")
                         save_client_endpoint(username, endpoint)
                         active_clients[username] = ActiveClient(
-                            last_time=last_time,
-                            transfer=transfer,
-                            endpoint=endpoint
+                            last_time=last_time or "",
+                            transfer=transfer or "",
+                            endpoint=endpoint or ""
                         )
                 current_peer = {}
 
         if "public_key" in current_peer:
-            last_handshake = current_peer.get("latest_handshake", "").lower()
+            last_handshake_raw = current_peer.get("latest_handshake")
+            last_handshake = last_handshake_raw.lower() if last_handshake_raw else ""
             if last_handshake not in ["never", "нет данных", "-"]:
-                peer_public_key = current_peer.get("public_key")
+                peer_public_key = current_peer.get("public_key") or ""
                 if peer_public_key in client_key_map:
                     username = client_key_map[peer_public_key]
                     last_time = current_peer.get("latest_handshake", "Нет данных")
@@ -386,9 +388,9 @@ def get_active_list() -> Dict[str, ActiveClient]:
                     endpoint = current_peer.get("endpoint", "Нет данных")
                     save_client_endpoint(username, endpoint)
                     active_clients[username] = ActiveClient(
-                            last_time=last_time,
-                            transfer=transfer,
-                            endpoint=endpoint
+                            last_time=last_time or "",
+                            transfer=transfer or "",
+                            endpoint=endpoint or ""
                         )
 
         return active_clients

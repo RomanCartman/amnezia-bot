@@ -2,25 +2,28 @@ import datetime
 import logging
 import re
 import humanize
+from typing import cast
 from zoneinfo import ZoneInfo
+import db
+from aiogram import Bot
 from aiogram import Router, F
 from aiogram.types import (
     Message,
     CallbackQuery,
     InlineKeyboardMarkup,
     InlineKeyboardButton,
+    BufferedInputFile,
 )
-from aiogram.filters import Command
+from aiogram.enums import ParseMode
+from aiogram.utils.chat_action import ChatActionSender
 from aiogram.fsm.context import FSMContext
 from admin_service.admin import is_privileged
+from service.send_backup_admin import create_db_backup
 from utils import parse_relative_time, parse_transfer
 from fsm.callback_data import ClientCallbackFactory
 from keyboard.menu import get_client_profile_keyboard, get_home_keyboard
 from fsm.admin_state import AdminState
-import db
-
-# Предполагается, что у вас есть функции для работы с данными, например:
-# from service.user_manager import add_new_user, add_new_admin
+from settings import BOT, DB_FILE
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -173,7 +176,9 @@ async def admin_list_users_callback(callback: CallbackQuery):
 
 
 @router.callback_query(ClientCallbackFactory.filter())
-async def client_selected_callback(callback: CallbackQuery, callback_data: ClientCallbackFactory):
+async def client_selected_callback(
+    callback: CallbackQuery, callback_data: ClientCallbackFactory
+):
     user_id = callback.from_user.id
 
     if (
@@ -218,10 +223,21 @@ async def client_selected_callback(callback: CallbackQuery, callback_data: Clien
         active_clients = db.get_active_list()
         active_info = active_clients.get(username)
 
-        if active_info and active_info.last_time.lower() not in ["never", "нет данных", "-"]:
+        if active_info and active_info.last_time.lower() not in [
+            "never",
+            "нет данных",
+            "-",
+        ]:
             try:
                 last_handshake = parse_relative_time(active_info.last_time)
-                if last_handshake and (datetime.datetime.now(ZoneInfo("Europe/Moscow")) - last_handshake).total_seconds() <= 60:
+                if (
+                    last_handshake
+                    and (
+                        datetime.datetime.now(ZoneInfo("Europe/Moscow"))
+                        - last_handshake
+                    ).total_seconds()
+                    <= 60
+                ):
                     status = "🟢 Онлайн"
                 else:
                     status = "❌ Офлайн"
@@ -266,3 +282,37 @@ async def client_selected_callback(callback: CallbackQuery, callback_data: Clien
             ),
         )
         await callback.answer("Ошибка на сервере.", show_alert=True)
+
+
+@router.callback_query(F.data == "create_backup")
+async def create_backup_callback(callback: CallbackQuery):
+    """Отправка бекапа админу"""
+    user_id = callback.from_user.id
+    if callback.message is None and callback.bot is None:
+        await callback.answer("Ошибка: бот недоступен.")
+        return
+    logger.info(f"Create backup for {user_id}")
+
+    if not is_privileged(user_id):
+        logger.warning(
+            f"User {user_id} attempted to access client list without permissions."
+        )
+        await callback.answer("Нет прав.", show_alert=True)
+        return
+
+    await callback.answer("Создаю бэкап...")
+
+    try:
+        bot = cast(Bot, callback.bot)
+        async with ChatActionSender.upload_document(bot=bot, chat_id=user_id):
+            backup_bytes = create_db_backup(DB_FILE)
+            await bot.send_document(
+                chat_id=user_id,
+                document=BufferedInputFile(file=backup_bytes, filename="backup.zip"),
+                caption="Бэкап успешно создан и отправлен.",
+                parse_mode=ParseMode.HTML,
+            )
+        logging.info(f"Бэкап отправлен администратору: {user_id}")
+    except Exception as e:
+        logging.error(f"Ошибка при создании/отправке бэкапа: {e}")
+        await callback.answer("Ошибка при создании бэкапа.", show_alert=True)

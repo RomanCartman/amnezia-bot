@@ -11,7 +11,7 @@ import string
 from datetime import datetime, timedelta, timezone
 
 from aiogram.types import User
-from service.base_model import UserData
+from service.base_model import Config, UserData
 from settings import CACHE_TTL, ISP_CACHE_FILE, WG_CONFIG_FILE
 
 logger = logging.getLogger(__name__)
@@ -189,3 +189,41 @@ def get_profile_text(user: UserData):
         profile_text += f"{trial_text}"
 
     return profile_text
+
+
+def generate_config_text(config: Config) -> str:
+    """Формирует текст VPN-конфигурации WireGuard."""
+    lines = ["[Interface]"]
+    lines.append(f"Address = {config.address}")
+    if config.dns:
+        lines.append(f"DNS = {config.dns}")
+    lines.append(f"PrivateKey = {config.private_key}")
+
+    # Дополнительные параметры интерфейса
+    for field in ["jc", "jmin", "jmax", "s1", "s2", "h1", "h2", "h3", "h4"]:
+        value = getattr(config, field)
+        if value is not None:
+            lines.append(f"{field.upper()} = {value}")
+
+    lines.append("[Peer]")
+    lines.append(f"PublicKey = {config.public_key}")
+    if config.preshared_key:
+        lines.append(f"PresharedKey = {config.preshared_key}")
+    if config.allowed_ips:
+        lines.append(f"AllowedIPs = {config.allowed_ips}")
+    if config.endpoint:
+        lines.append(f"Endpoint = {config.endpoint}")
+    if config.persistent_keepalive:
+        lines.append(f"PersistentKeepalive = {config.persistent_keepalive}")
+
+    return "\n".join(lines)
+
+
+def get_vpn_caption(user_id: int) -> str:
+    return (
+        f"Конфигурация для {user_id}:\n"
+        f"AmneziaVPN:\n"
+        f"🍏 [App Store](https://apps.apple.com/ru/app/amneziawg/id6478942365)\n"
+        f"📱 [Google Play](https://play.google.com/store/apps/details?id=org.amnezia.vpn&hl=ru)\n"
+        f"💻 [GitHub](https://github.com/amnezia-vpn/amnezia-client)\n"
+    )

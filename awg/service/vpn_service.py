@@ -2,7 +2,7 @@
 import os
 import configparser
 from aiogram.types import Message, FSInputFile
-from utils import generate_deactivate_presharekey
+from utils import generate_deactivate_presharekey, get_vpn_caption
 from db import root_add
 from service.db_instance import user_db
 from bot_manager import BOT
@@ -22,18 +22,10 @@ async def create_vpn_config(user_id: int, message: Message):
         await message.answer("❌ Не удалось найти сгенерированный конфиг-файл.")
         return
 
-    # vpn_key = await generate_vpn_key(conf_path)
     process_and_add_config(conf_path, user_id)
-    caption = (
-        f"Конфигурация для {user_id}:\n"
-        f"AmneziaVPN:\n"
-        f"[Google Play](https://play.google.com/store/apps/details?id=org.amnezia.vpn&hl=ru)\n"
-        f"[GitHub](https://github.com/amnezia-vpn/amnezia-client)\n"
-        # f"```\n{vpn_key}\n```"
-    )
     config_file = FSInputFile(conf_path)
     config_message = await BOT.send_document(
-        user_id, config_file, caption=caption, parse_mode="Markdown"
+        user_id, config_file, caption=get_vpn_caption(user_id), parse_mode="Markdown"
     )
     await BOT.pin_chat_message(
         user_id, config_message.message_id, disable_notification=True

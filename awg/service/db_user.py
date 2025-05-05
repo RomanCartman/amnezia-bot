@@ -4,6 +4,7 @@ import sqlite3
 from typing import List, Literal, Optional, Union
 from dateutil.relativedelta import relativedelta
 
+from settings import DB_FILE
 from service.base_model import Payment, UserData, Config
 
 logger = logging.getLogger(__name__)
@@ -12,9 +13,6 @@ logger = logging.getLogger(__name__)
 # =====================================================================
 # Интегрированный класс Database для управления пользователями и конфигурациями VPN
 # =====================================================================
-
-DB_FILE = "database.db"
-
 
 class Database:
     def __init__(self, db_path=DB_FILE):
