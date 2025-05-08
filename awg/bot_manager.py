@@ -1,5 +1,9 @@
 import logging
 import asyncio
+import os
+import sys
+from utils import load_isp_cache
+import db
 from zoneinfo import ZoneInfo
 from aiogram import Router, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
@@ -8,7 +12,7 @@ from service.user_vpn_check import update_vpn_state
 from service.notifier import daily_check_end_date_and_notify
 from handlers import payment, user_actions, start_help, admin_actions, instrustion
 from middlewares.admin_delete import AdminMessageDeletionMiddleware
-from settings import BOT, ADMINS
+from settings import BOT, ADMINS, check_environment
 
 
 # ⚙️ Логирование
@@ -23,6 +27,15 @@ scheduler = AsyncIOScheduler(timezone=ZoneInfo("UTC"))
 
 # 🚀 Запуск
 async def main():
+    os.makedirs("files/connections", exist_ok=True)
+    os.makedirs("users", exist_ok=True)
+    await load_isp_cache()
+    if not await check_environment():
+        for admin_id in ADMINS:
+            await BOT.send_message(admin_id, "Ошибка инициализации AmneziaVPN.")
+        await BOT.close()
+        sys.exit(1)
+
     dp.include_router(start_help.router)
     dp.include_router(payment.router)
     dp.include_router(user_actions.router)
@@ -46,6 +59,8 @@ async def main():
         minute=30,
         timezone=ZoneInfo("Europe/Moscow"),
     )
+
+    scheduler.add_job(db.ensure_peer_names, trigger="interval", minutes=1)
 
     scheduler.start()
     await dp.start_polling(BOT)

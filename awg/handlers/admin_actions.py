@@ -1,6 +1,11 @@
+import asyncio
 import datetime
+import json
 import logging
+import os
 import re
+import aiofiles
+import aiohttp
 import humanize
 from typing import cast
 from zoneinfo import ZoneInfo
@@ -19,11 +24,11 @@ from aiogram.utils.chat_action import ChatActionSender
 from aiogram.fsm.context import FSMContext
 from admin_service.admin import is_privileged
 from service.send_backup_admin import create_db_backup
-from utils import parse_relative_time, parse_transfer
+from utils import get_isp_info, parse_relative_time, parse_transfer
 from fsm.callback_data import ClientCallbackFactory
 from keyboard.menu import get_client_profile_keyboard, get_home_keyboard
 from fsm.admin_state import AdminState
-from settings import BOT, DB_FILE
+from settings import ADMINS, BOT, DB_FILE, MODERATORS
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -316,3 +321,103 @@ async def create_backup_callback(callback: CallbackQuery):
     except Exception as e:
         logging.error(f"Ошибка при создании/отправке бэкапа: {e}")
         await callback.answer("Ошибка при создании бэкапа.", show_alert=True)
+
+
+@router.callback_query(F.data.startswith("connections_"))
+async def client_connections_callback(callback: CallbackQuery):
+    if callback.data is None:
+        await callback.answer("Ошибка: бот недоступен.")
+        return
+    user_id = callback.from_user.id
+    if user_id not in ADMINS and user_id not in MODERATORS:
+        await callback.answer("Нет прав.", show_alert=True)
+        return
+
+    username = callback.data.split("connections_")[1]
+    file_path = os.path.join("files", "connections", f"{username}_ip.json")
+    if not os.path.exists(file_path):
+        await callback.answer("Нет данных о подключениях.", show_alert=True)
+        return
+
+    async with aiofiles.open(file_path, "r") as f:
+        data = json.loads(await f.read())
+
+    last_connections = sorted(
+        data.items(),
+        key=lambda x: datetime.datetime.strptime(x[1], "%d.%m.%Y %H:%M"),
+        reverse=True,
+    )[:5]
+
+    isp_results = await asyncio.gather(
+        *(get_isp_info(ip) for ip, _ in last_connections)
+    )
+
+    text = f"*Последние подключения {username}:*\n" + "\n".join(
+        f"{ip} ({isp}) - {time}"
+        for (ip, time), isp in zip(last_connections, isp_results)
+    )
+
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="⬅️ Назад", callback_data=ClientCallbackFactory(username=username).pack()
+                ),
+                InlineKeyboardButton(text="🏠 Домой", callback_data="home"),
+            ]
+        ]
+    )
+    if isinstance(callback.message, Message):
+        await callback.message.edit_text(
+            text=text, parse_mode=ParseMode.MARKDOWN, reply_markup=keyboard
+        )
+
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("ip_info_"))
+async def ip_info_callback(callback: CallbackQuery):
+    if callback.data is None:
+        await callback.answer("Ошибка: бот недоступен.")
+        return
+
+    user_id = callback.from_user.id
+    if user_id not in ADMINS and user_id not in MODERATORS:
+        await callback.answer("Нет прав.", show_alert=True)
+        return
+
+    username = callback.data.split("ip_info_")[1]
+    active_clients = db.get_active_list()
+    active_info = active_clients.get(username)
+
+    if not active_info:
+        await callback.answer("Нет данных о подключении.", show_alert=True)
+        return
+
+    ip_address = active_info.endpoint.split(":")[0]
+
+    async with aiohttp.ClientSession() as session:
+        async with session.get(f"http://ip-api.com/json/{ip_address}") as resp:
+            data = await resp.json() if resp.status == 200 else {}
+
+    text = f"*IP info {username}:*\n" + "\n".join(
+        f"{k.capitalize()}: {v}" for k, v in data.items()
+    )
+
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="⬅️ Назад", callback_data=ClientCallbackFactory(username=username).pack()
+                ),
+                InlineKeyboardButton(text="🏠 Домой", callback_data="home"),
+            ]
+        ]
+    )
+
+    if isinstance(callback.message, Message):
+        await callback.message.edit_text(
+            text=text, parse_mode=ParseMode.MARKDOWN, reply_markup=keyboard
+        )
+
+    await callback.answer()

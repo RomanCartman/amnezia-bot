@@ -1,3 +1,4 @@
+import subprocess
 import sys
 import logging
 import db
@@ -35,3 +36,16 @@ VPN_NAME = vpn_name
 ISP_CACHE_FILE = "files/isp_cache.json"
 CACHE_TTL = 24 * 3600  # 24 часа
 DB_FILE = "database.db"
+
+
+async def check_environment():
+    if DOCKER_CONTAINER not in subprocess.check_output(
+        f"docker ps --filter 'name={DOCKER_CONTAINER}' --format '{{{{.Names}}}}'",
+        shell=True,
+    ).decode().strip().split("\n"):
+        logger.error(f"Контейнер '{DOCKER_CONTAINER}' не найден.")
+        return False
+    subprocess.check_call(
+        f"docker exec {DOCKER_CONTAINER} test -f {WG_CONFIG_FILE}", shell=True
+    )
+    return True

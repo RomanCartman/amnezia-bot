@@ -95,6 +95,8 @@ def create_config(path="files/setting.ini"):
 
 
 def ensure_peer_names():
+    logger.info(f"Start ensure_peer_names")
+    
     setting = get_config()
     wg_config_file = setting["wg_config_file"]
     docker_container = setting["docker_container"]

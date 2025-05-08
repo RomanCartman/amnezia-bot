@@ -217,46 +217,6 @@ async def remove_admin_callback(callback_query: types.CallbackQuery):
     await list_admins_callback(callback_query)
 
 
-@dp.callback_query_handler(lambda c: c.data.startswith("connections_"))
-async def client_connections_callback(callback_query: types.CallbackQuery):
-    user_id = callback_query.from_user.id
-    if user_id not in ADMINS and user_id not in MODERATORS:
-        await callback_query.answer("Нет прав.", show_alert=True)
-        return
-    username = callback_query.data.split("connections_")[1]
-    file_path = os.path.join("files", "connections", f"{username}_ip.json")
-    if not os.path.exists(file_path):
-        await callback_query.answer("Нет данных о подключениях.", show_alert=True)
-        return
-
-    async with aiofiles.open(file_path, "r") as f:
-        data = json.loads(await f.read())
-    last_connections = sorted(
-        data.items(),
-        key=lambda x: datetime.strptime(x[1], "%d.%m.%Y %H:%M"),
-        reverse=True,
-    )[:5]
-    isp_results = await asyncio.gather(
-        *(get_isp_info(ip) for ip, _ in last_connections)
-    )
-
-    text = f"*Последние подключения {username}:*\n" + "\n".join(
-        f"{ip} ({isp}) - {time}"
-        for (ip, time), isp in zip(last_connections, isp_results)
-    )
-    keyboard = InlineKeyboardMarkup(row_width=2).add(
-        InlineKeyboardButton("⬅️ Назад", callback_data=f"client_{username}"),
-        InlineKeyboardButton("🏠 Домой", callback_data="home"),
-    )
-    await BOT.edit_message_text(
-        chat_id=callback_query.message.chat.id,
-        message_id=callback_query.message.message_id,
-        text=text,
-        parse_mode="Markdown",
-        reply_markup=keyboard,
-    )
-    await callback_query.answer()
-
 
 @dp.callback_query_handler(lambda c: c.data.startswith("ip_info_"))
 async def ip_info_callback(callback_query: types.CallbackQuery):
@@ -317,83 +277,6 @@ async def client_delete_callback(callback_query: types.CallbackQuery):
 
 
 
-@dp.callback_query_handler(lambda c: c.data == "instructions")
-async def show_instructions(callback_query: types.CallbackQuery):
-    user_id = callback_query.from_user.id
-    if user_id not in ADMINS and user_id not in MODERATORS:
-        await callback_query.answer("Нет прав.", show_alert=True)
-        return
-    keyboard = InlineKeyboardMarkup(row_width=2).add(
-        InlineKeyboardButton("📱 Для мобильных", callback_data="mobile_instructions"),
-        InlineKeyboardButton("💻 Для компьютеров", callback_data="pc_instructions"),
-        InlineKeyboardButton("🏠 Домой", callback_data="home"),
-    )
-    await BOT.edit_message_text(
-        chat_id=callback_query.message.chat.id,
-        message_id=callback_query.message.message_id,
-        text="Выберите тип устройства для инструкции:",
-        reply_markup=keyboard,
-    )
-    await callback_query.answer()
-
-
-@dp.callback_query_handler(lambda c: c.data == "mobile_instructions")
-async def mobile_instructions(callback_query: types.CallbackQuery):
-    user_id = callback_query.from_user.id
-    if user_id not in ADMINS and user_id not in MODERATORS:
-        await callback_query.answer("Нет прав.", show_alert=True)
-        return
-    instruction_text = (
-        "📱 *Инструкция для мобильных устройств:*\n\n"
-        "1. Скачайте приложение AmneziaVPN:\n"
-        "   - [Google Play](https://play.google.com/store/apps/details?id=org.amnezia.vpn&hl=ru)\n"
-        "   - Или через [GitHub](https://github.com/amnezia-vpn/amnezia-client)\n"
-        "2. Откройте приложение и выберите 'Добавить конфигурацию'.\n"
-        "3. Скопируйте VPN ключ из сообщения с файлом .conf.\n"
-        "4. Вставьте ключ в приложение и нажмите 'Подключить'.\n"
-        "5. Готово! Вы подключены к VPN."
-    )
-    keyboard = InlineKeyboardMarkup().add(
-        InlineKeyboardButton("⬅️ Назад", callback_data="instructions"),
-        InlineKeyboardButton("🏠 Домой", callback_data="home"),
-    )
-    await BOT.edit_message_text(
-        chat_id=callback_query.message.chat.id,
-        message_id=callback_query.message.message_id,
-        text=instruction_text,
-        parse_mode="Markdown",
-        reply_markup=keyboard,
-    )
-    await callback_query.answer()
-
-
-@dp.callback_query_handler(lambda c: c.data == "pc_instructions")
-async def pc_instructions(callback_query: types.CallbackQuery):
-    user_id = callback_query.from_user.id
-    if user_id not in ADMINS and user_id not in MODERATORS:
-        await callback_query.answer("Нет прав.", show_alert=True)
-        return
-    instruction_text = (
-        "💻 *Инструкция для компьютеров:*\n\n"
-        "1. Скачайте клиент AmneziaVPN с [GitHub](https://github.com/amnezia-vpn/amnezia-client).\n"
-        "2. Установите программу на ваш компьютер.\n"
-        "3. Откройте AmneziaVPN и выберите 'Импорт конфигурации'.\n"
-        "4. Укажите путь к скачанному файлу .conf.\n"
-        "5. Нажмите 'Подключить' для активации VPN.\n"
-        "6. Готово! VPN активен."
-    )
-    keyboard = InlineKeyboardMarkup().add(
-        InlineKeyboardButton("⬅️ Назад", callback_data="instructions"),
-        InlineKeyboardButton("🏠 Домой", callback_data="home"),
-    )
-    await BOT.edit_message_text(
-        chat_id=callback_query.message.chat.id,
-        message_id=callback_query.message.message_id,
-        text=instruction_text,
-        parse_mode="Markdown",
-        reply_markup=keyboard,
-    )
-    await callback_query.answer()
 
 
 async def check_environment():
