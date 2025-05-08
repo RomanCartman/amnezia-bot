@@ -111,3 +111,15 @@ def get_user_profile_menu() -> InlineKeyboardMarkup:
             ],
         ]
     )
+
+def get_user_profile_menu_expired() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="🔄 Продлить", callback_data="renew_vpn"),
+            ],
+            [
+                InlineKeyboardButton(text="🏠 Домой", callback_data="home"),
+            ],
+        ]
+    )

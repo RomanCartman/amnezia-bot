@@ -6,8 +6,6 @@ import aiohttp
 import logging
 import aiofiles
 import ipaddress
-import random
-import string
 from datetime import datetime, timedelta, timezone
 
 from aiogram.types import User
@@ -226,4 +224,13 @@ def get_vpn_caption(user_id: int) -> str:
         f"🍏 [App Store](https://apps.apple.com/ru/app/amneziawg/id6478942365)\n"
         f"📱 [Google Play](https://play.google.com/store/apps/details?id=org.amnezia.vpn&hl=ru)\n"
         f"💻 [GitHub](https://github.com/amnezia-vpn/amnezia-client)\n"
+    )
+
+def get_welcome_caption() -> str:
+    return (
+        "👋 Добро пожаловать в *Rufat Бот!*\n\n"
+        "⚡ **Оптимизированное соединение.** 🔐 **Полная безопасность.** 💸 **Всего за 80₽ в месяц.**\n\n"
+        "Это доступнее чашки кофе, но несравнимо полезнее.\n"
+        'Нажми **"Подключить"** и наслаждайся быстрым и защищённым интернетом уже сейчас! 🚀\n\n'
+        "Выберите действие:"
     )

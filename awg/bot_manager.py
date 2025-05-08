@@ -42,8 +42,8 @@ async def main():
     scheduler.add_job(
         daily_check_end_date_and_notify,
         trigger="cron",
-        hour=9,  # каждый день в 10:00 утра
-        minute=28,
+        hour=10,  # каждый день в 10:00 утра
+        minute=0,
         timezone=ZoneInfo("Europe/Moscow"),
     )
 
@@ -51,7 +51,7 @@ async def main():
         update_vpn_state,
         trigger="cron",
         hour=9,  # каждый день в 9:00 утра
-        minute=0,
+        minute=30,
         timezone=ZoneInfo("Europe/Moscow"),
     )
 

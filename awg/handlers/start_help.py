@@ -2,7 +2,7 @@ import logging
 from aiogram import Router, F
 
 from service.db_instance import user_db
-from utils import get_short_name
+from utils import get_short_name, get_welcome_caption
 from keyboard.menu import get_main_menu_markup, get_user_main_menu
 from aiogram.filters import Command
 from aiogram.types import Message, FSInputFile, CallbackQuery
@@ -31,14 +31,14 @@ async def help_command_handler(message: Message):
             photo = FSInputFile("logo.png")
             await message.answer_photo(
                 photo=photo,
-                caption="👋 Добро пожаловать в *VPN Бот!*\n\nВыберите действие:",
+                caption=get_welcome_caption(),
                 parse_mode="Markdown",
                 reply_markup=get_user_main_menu(),
             )
         except Exception as e:
             logger.error(f"Ошибка при отправке приветствия: {e}")
             await message.answer(
-                "👋 Добро пожаловать!\n\nВыберите действие:",
+                get_welcome_caption(),
                 reply_markup=get_user_main_menu(),
             )
 
@@ -66,14 +66,14 @@ async def home_callback_handler(callback: CallbackQuery):
             photo = FSInputFile("logo.png")
             await callback.message.answer_photo(
                 photo=photo,
-                caption="👋 Добро пожаловать в *VPN Бот!*\n\nВыберите действие:",
+                caption=get_welcome_caption(),
                 parse_mode="Markdown",
                 reply_markup=get_user_main_menu(),
             )
         except Exception as e:
             logger.error(f"Ошибка при отображении главного меню: {e}", exc_info=True)
             await callback.message.edit_text(
-                text="👋 Добро пожаловать!\n\nВыберите действие:",
+                text=get_welcome_caption(),
                 reply_markup=get_user_main_menu(),
             )
 

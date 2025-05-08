@@ -70,8 +70,8 @@ async def handle_extend_subscription(callback: CallbackQuery):
 
     await callback.message.bot.send_invoice(
         chat_id=telegram_id,
-        title=f"Покупка VPN на {month} mec.",
-        description="Мы предоставляем удобные VPN услуги",
+        title=f"Безопасное соединение на {month} mec.",
+        description="Мы предоставляем безопасное соединение",
         payload=f"{unique_payload}-{telegram_id}-{month}-{price_per_month}",
         provider_token=YOOKASSA_PROVIDER_TOKEN,
         currency="RUB",

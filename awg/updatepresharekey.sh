@@ -18,9 +18,11 @@ JSON_DATA=$(cat)
 docker exec -i "$DOCKER_CONTAINER" cat "$WG_CONFIG_FILE" > "$SERVER_CONF_PATH"
 
 # Обрабатываем JSON
-echo "$JSON_DATA" | jq -c '.[]' | while read -r entry; do
+while IFS= read -r entry; do
     CLIENT_NAME=$(echo "$entry" | jq -r '.client_name')
     NEW_PSK=$(echo "$entry" | jq -r '.new_preshared_key')
+
+    echo "Processing client $CLIENT_NAME"
 
     # Если new_preshared_key == false, генерируем новый PSK
     if [ "$NEW_PSK" == "false" ]; then
@@ -38,7 +40,7 @@ echo "$JSON_DATA" | jq -c '.[]' | while read -r entry; do
         START=${LINES[$i]}
         END=${LINES[$((i+1))]:-$(wc -l < "$SERVER_CONF_PATH")}
 
-        if sed -n "${START},${END}p" "$SERVER_CONF_PATH" | grep -q "# $CLIENT_NAME"; then
+        if sed -n "${START},${END}p" "$SERVER_CONF_PATH" | grep -q "# *$CLIENT_NAME"; then
             FOUND_BLOCK_START=$START
             FOUND_BLOCK_END=$END
             break
@@ -51,7 +53,7 @@ echo "$JSON_DATA" | jq -c '.[]' | while read -r entry; do
     else
         echo "Warning: Client $CLIENT_NAME not found"
     fi
-done
+done < <(echo "$JSON_DATA" | jq -c '.[]')
 
 # Возврат конфига в контейнер
 docker cp "$SERVER_CONF_PATH" "$DOCKER_CONTAINER:$WG_CONFIG_FILE"

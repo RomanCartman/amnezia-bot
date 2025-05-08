@@ -1,3 +1,4 @@
+from datetime import datetime
 from io import BytesIO
 import logging
 import os
@@ -9,7 +10,7 @@ from aiogram.filters import Command
 from aiogram.types import CallbackQuery, Message, BufferedInputFile
 
 from service.db_instance import user_db
-from keyboard.menu import get_user_profile_menu
+from keyboard.menu import get_user_profile_menu, get_user_profile_menu_expired
 from settings import BOT, VPN_NAME
 
 logger = logging.getLogger(__name__)
@@ -38,19 +39,33 @@ async def user_profile(callback: CallbackQuery):
     # Форматируем дату окончания подписки
     profile_text = get_profile_text(user)
 
+    # Выбор нужного меню в зависимости от подписки
+    if not user.is_unlimited:
+        try:
+            end_date_obj = datetime.strptime(user.end_date, "%Y-%m-%d") if user.end_date else None
+        except Exception:
+            end_date_obj = None
+
+        if not user.end_date or (end_date_obj and end_date_obj < datetime.now()):
+            reply_markup = get_user_profile_menu_expired()  # Кнопки для неактивной подписки
+        else:
+            reply_markup = get_user_profile_menu()
+    else:
+        reply_markup = get_user_profile_menu()
+
     # Безопасная замена: если текст редактировать нельзя — удалим и отправим заново
     if message.text:
         await message.edit_text(
             profile_text,
             parse_mode="Markdown",
-            reply_markup=get_user_profile_menu(),
+            reply_markup=reply_markup,
         )
     else:
         await message.delete()
         await message.answer(
             profile_text,
             parse_mode="Markdown",
-            reply_markup=get_user_profile_menu(),
+            reply_markup=reply_markup,
         )
 
     await callback.answer()
