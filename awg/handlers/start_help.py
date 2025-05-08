@@ -28,7 +28,7 @@ async def help_command_handler(message: Message):
         name = get_short_name(message.from_user)
         user_db.add_user(str(user_id), name)
         try:
-            photo = FSInputFile("logo.png")
+            photo = FSInputFile("media/logo.png")
             await message.answer_photo(
                 photo=photo,
                 caption=get_welcome_caption(),
@@ -63,7 +63,7 @@ async def home_callback_handler(callback: CallbackQuery):
         )
     else:
         try:
-            photo = FSInputFile("logo.png")
+            photo = FSInputFile("media/logo.png")
             await callback.message.answer_photo(
                 photo=photo,
                 caption=get_welcome_caption(),

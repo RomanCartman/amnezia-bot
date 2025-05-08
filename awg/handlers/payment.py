@@ -1,5 +1,6 @@
 import os
 from typing import Optional
+from service.user_vpn_check import update_vpn_state
 from service.vpn_service import create_vpn_config
 import db
 import uuid
@@ -162,7 +163,7 @@ async def successful_payment(message: Message):
                 await create_vpn_config(telegram_id, message)
         else:
             await message.answer("🛡 У вас уже есть активная конфигурация.")
-
+        update_vpn_state()
         await message.answer("✅ Спасибо за покупку! Подписка активирована.")
     except Exception as e:
         logger.error(f"❌ Ошибка при обработке успешной оплаты: {e}")

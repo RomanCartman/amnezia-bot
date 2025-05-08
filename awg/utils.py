@@ -221,8 +221,8 @@ def get_vpn_caption(user_id: int) -> str:
     return (
         f"Конфигурация для {user_id}:\n"
         f"AmneziaVPN:\n"
-        f"🍏 [App Store](https://apps.apple.com/ru/app/amneziawg/id6478942365)\n"
-        f"📱 [Google Play](https://play.google.com/store/apps/details?id=org.amnezia.vpn&hl=ru)\n"
+        f"📱 [App Store](https://apps.apple.com/ru/app/amneziawg/id6478942365)\n"
+        f"🤖 [Google Play](https://play.google.com/store/apps/details?id=org.amnezia.vpn&hl=ru)\n"
         f"💻 [GitHub](https://github.com/amnezia-vpn/amnezia-client)\n"
     )
 

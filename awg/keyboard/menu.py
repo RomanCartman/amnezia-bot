@@ -107,16 +107,38 @@ def get_user_profile_menu() -> InlineKeyboardMarkup:
                 InlineKeyboardButton(text="🔄 Продлить", callback_data="renew_vpn"),
             ],
             [
+                InlineKeyboardButton(text="ℹ️ Инструкция", callback_data="instructions"),
+            ],
+            [
                 InlineKeyboardButton(text="🏠 Домой", callback_data="home"),
             ],
         ]
     )
+
 
 def get_user_profile_menu_expired() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
                 InlineKeyboardButton(text="🔄 Продлить", callback_data="renew_vpn"),
+            ],
+            [
+                InlineKeyboardButton(text="🏠 Домой", callback_data="home"),
+            ],
+        ]
+    )
+
+
+def get_instruction_type() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="📱 iPhone", callback_data="instruction_iphone"
+                ),
+                InlineKeyboardButton(
+                    text="🤖 Android", callback_data="instruction_android"
+                ),
             ],
             [
                 InlineKeyboardButton(text="🏠 Домой", callback_data="home"),

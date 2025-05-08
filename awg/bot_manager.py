@@ -1,23 +1,14 @@
 import logging
 import asyncio
-from time import timezone
 from zoneinfo import ZoneInfo
 from aiogram import Router, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from service.user_vpn_check import update_vpn_state
 from service.notifier import daily_check_end_date_and_notify
-from handlers import payment, user_actions, start_help, admin_actions
+from handlers import payment, user_actions, start_help, admin_actions, instrustion
 from middlewares.admin_delete import AdminMessageDeletionMiddleware
-from settings import (
-    BOT,
-    ADMINS,
-    MODERATORS,
-    WG_CONFIG_FILE,
-    DOCKER_CONTAINER,
-    ISP_CACHE_FILE,
-    CACHE_TTL,
-)
+from settings import BOT, ADMINS
 
 
 # ⚙️ Логирование
@@ -36,6 +27,7 @@ async def main():
     dp.include_router(payment.router)
     dp.include_router(user_actions.router)
     dp.include_router(admin_actions.router)
+    dp.include_router(instrustion.router)
 
     dp.message.middleware(AdminMessageDeletionMiddleware(admins=ADMINS))
 
