@@ -1,5 +1,6 @@
 import os
 from typing import Optional
+from service.notifier import notify_admins
 from service.user_vpn_check import update_vpn_state
 from service.vpn_service import create_vpn_config
 import db
@@ -110,9 +111,7 @@ async def process_successful_payment(
         if not updated_payment:
             return None
 
-        user_db.update_user_end_date(
-            user_id, months_to_add=updated_payment.months
-        )
+        user_db.update_user_end_date(user_id, months_to_add=updated_payment.months)
         return updated_payment.months
     except Exception as e:
         logger.error(f"Ошибка при обработке успешного платежа: {e}", exc_info=True)
@@ -164,6 +163,7 @@ async def successful_payment(message: Message):
         else:
             await message.answer("🛡 У вас уже есть активная конфигурация.")
         update_vpn_state()
+        notify_admins(text=f"🔁 Подписка продлена на {months} мес. для {telegram_id}")
         await message.answer("✅ Спасибо за покупку! Подписка активирована.")
     except Exception as e:
         logger.error(f"❌ Ошибка при обработке успешной оплаты: {e}")

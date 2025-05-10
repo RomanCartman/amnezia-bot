@@ -4,7 +4,7 @@ from typing import List
 
 from service.db_instance import user_db
 from service.base_model import UserData
-from settings import BOT
+from settings import ADMINS, BOT
 
 logger = logging.getLogger(__name__)
 
@@ -49,4 +49,23 @@ async def notify_users(users: List[UserData]):
 
     logger.info(
         f"📊 Статистика рассылки: Успешно: {successful_sends}, Ошибок: {failed_sends}"
+    )
+
+
+async def notify_admins(text: str, parse_mode: str = "Markdown"):
+    """Рассылает сообщение всем администраторам."""
+    successful_sends = 0
+    failed_sends = 0
+
+    for admin_id in ADMINS:
+        try:
+            await BOT.send_message(chat_id=admin_id, text=text, parse_mode=parse_mode)
+            logger.info(f"✅ Сообщение администратору {admin_id} отправлено.")
+            successful_sends += 1
+        except Exception as e:
+            logger.error(f"❌ Ошибка отправки админу {admin_id}: {e}")
+            failed_sends += 1
+
+    logger.info(
+        f"📊 Админам отправлено: Успешно: {successful_sends}, Ошибок: {failed_sends}"
     )
