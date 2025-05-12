@@ -41,6 +41,8 @@ def create_config(path="files/setting.ini"):
     config.add_section("setting")
 
     bot_token = input("Введите токен Telegram бота: ").strip()
+    yookassa_provider_token = input("Введите токен yookassa: ").strip()
+    vpn_name = input("Введите имя Telegram бота: ").strip()
     admin_ids_input = input(
         "Введите Telegram ID администраторов через запятую (например, 12345, 67890): "
     ).strip()
@@ -79,6 +81,8 @@ def create_config(path="files/setting.ini"):
         ).strip()
 
     config.set("setting", "bot_token", bot_token)
+    config.set("setting", "vpn_name", vpn_name)
+    config.set("setting", "yookassa_provider_token", yookassa_provider_token)
     config.set(
         "setting", "admin_ids", ",".join(admin_ids)
     )  # Сохраняем как строку с разделителем
