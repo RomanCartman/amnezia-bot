@@ -75,7 +75,7 @@ def get_user_main_menu() -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text="💳 Профиль", callback_data="user_account")],
             [
                 InlineKeyboardButton(
-                    text="📲 Как установить", callback_data="install_guide"
+                    text="📲 Как установить", callback_data="instructions"
                 )
             ],
         ]
