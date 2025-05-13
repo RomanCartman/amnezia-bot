@@ -91,7 +91,7 @@ def get_extend_subscription_keyboard() -> InlineKeyboardMarkup:
             ],
             [
                 InlineKeyboardButton(text="3 месяца - 210₽", callback_data="3_extend"),
-                InlineKeyboardButton(text="◀️ Назад", callback_data="start"),
+                InlineKeyboardButton(text="◀️ Назад", callback_data="home"),
             ],
         ]
     )
