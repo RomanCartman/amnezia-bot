@@ -28,6 +28,7 @@ from utils import get_isp_info, parse_relative_time, parse_transfer
 from fsm.callback_data import ClientCallbackFactory
 from keyboard.menu import get_client_profile_keyboard, get_home_keyboard
 from fsm.admin_state import AdminState
+from service.db_instance import user_db
 from settings import ADMINS, BOT, DB_FILE, MODERATORS
 
 logger = logging.getLogger(__name__)
@@ -130,7 +131,13 @@ async def admin_list_users_callback(callback: CallbackQuery):
             ]:
                 status = "🟢"  # Упрощенно ставим 🟢 если строка рукопожатия не пуста и не Never/Нет данных/
 
-            button_text = f"{status} {username}"
+            telegram_name = user_db.get_user_by_telegram_id(username)
+
+            if telegram_name is not False:
+                button_text = f"{status} {telegram_name.name}"
+            else:
+                button_text = f"{status} {username}"
+
             keyboard_buttons.append(
                 InlineKeyboardButton(
                     text=button_text,
@@ -361,7 +368,8 @@ async def client_connections_callback(callback: CallbackQuery):
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="⬅️ Назад", callback_data=ClientCallbackFactory(username=username).pack()
+                    text="⬅️ Назад",
+                    callback_data=ClientCallbackFactory(username=username).pack(),
                 ),
                 InlineKeyboardButton(text="🏠 Домой", callback_data="home"),
             ]
@@ -408,7 +416,8 @@ async def ip_info_callback(callback: CallbackQuery):
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="⬅️ Назад", callback_data=ClientCallbackFactory(username=username).pack()
+                    text="⬅️ Назад",
+                    callback_data=ClientCallbackFactory(username=username).pack(),
                 ),
                 InlineKeyboardButton(text="🏠 Домой", callback_data="home"),
             ]
