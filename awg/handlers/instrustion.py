@@ -97,12 +97,11 @@ async def show_instructions(callback: CallbackQuery):
     if isinstance(callback.message, Message):
         await callback.message.edit_text(
             text=(
-                f"Скачайте приложение, после того как установите выбиратайте тип устройства\n\n"
-                f"AmneziaVPN:\n"
-                f"📱 [App Store](https://apps.apple.com/ru/app/amneziawg/id6478942365)\n"
-                f"🤖 [Google Play](https://play.google.com/store/apps/details?id=org.amnezia.vpn&hl=ru)\n"
-                f"💻 [GitHub](https://github.com/amnezia-vpn/amnezia-client)\n\n"
-                f"Выберите тип устройства для инструкции:"
+                "Чтобы начать, сначала скачайте приложение, затем установите его. После установки выберите тип вашего устройства, чтобы получить подробные инструкции.\n\n"
+                "Ссылки для скачивания AmneziaVPN:\n"
+                "📱 Если у вас iPhone или iPad – скачайте приложение здесь: [App Store](https://apps.apple.com/ru/app/amneziawg/id6478942365)\n\n"
+                "🤖 Если у вас Android – скачайте приложение здесь: [Google Play](https://play.google.com/store/apps/details?id=org.amnezia.vpn&hl=ru)\n\n"
+                "После установки выберите свое устройство, чтобы узнать, как настроить приложение."
             ),
             disable_web_page_preview=True,
             reply_markup=get_instruction_type(),
