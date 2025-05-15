@@ -5,11 +5,12 @@ from aiogram.types import Message, FSInputFile
 from utils import generate_deactivate_presharekey, get_vpn_caption
 from db import root_add
 from service.db_instance import user_db
-from bot_manager import BOT
 
 
 async def create_vpn_config(user_id: int, message: Message):
     """Генерируем файл в докере копируем его в директорию создаем файл и отправляем клиенту"""
+    from bot_manager import BOT
+
     success = root_add(str(user_id), ipv6=False)
     if not success:
         await message.answer(
@@ -25,10 +26,13 @@ async def create_vpn_config(user_id: int, message: Message):
     process_and_add_config(conf_path, user_id)
     config_file = FSInputFile(conf_path)
     config_message = await BOT.send_document(
-        user_id, config_file, caption=get_vpn_caption(user_id), parse_mode="Markdown"
+        message.from_user.id,
+        config_file,
+        caption=get_vpn_caption(user_id),
+        parse_mode="Markdown",
     )
     await BOT.pin_chat_message(
-        user_id, config_message.message_id, disable_notification=True
+        message.from_user.id, config_message.message_id, disable_notification=True
     )
 
 

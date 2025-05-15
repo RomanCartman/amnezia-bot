@@ -139,41 +139,6 @@ async def handle_messages(message: types.Message):
             await message.reply("Введите корректный Telegram ID.")
 
 
-@dp.callback_query_handler(lambda c: c.data == "add_user")
-async def prompt_for_user_name(callback_query: types.CallbackQuery):
-    user_id = callback_query.from_user.id
-    if user_id not in ADMINS and user_id not in MODERATORS:
-        await callback_query.answer("Нет прав.", show_alert=True)
-        return
-    await BOT.edit_message_text(
-        chat_id=callback_query.message.chat.id,
-        message_id=callback_query.message.message_id,
-        text="Введите имя пользователя:",
-        reply_markup=InlineKeyboardMarkup().add(
-            InlineKeyboardButton("🏠 Домой", callback_data="home")
-        ),
-    )
-    user_main_messages[user_id]["state"] = "waiting_for_user_name"
-    await callback_query.answer()
-
-
-@dp.callback_query_handler(lambda c: c.data == "add_admin")
-async def prompt_for_admin_id(callback_query: types.CallbackQuery):
-    user_id = callback_query.from_user.id
-    if user_id not in ADMINS:
-        await callback_query.answer("Нет прав.", show_alert=True)
-        return
-    await BOT.edit_message_text(
-        chat_id=callback_query.message.chat.id,
-        message_id=callback_query.message.message_id,
-        text="Введите Telegram ID нового админа:",
-        reply_markup=InlineKeyboardMarkup().add(
-            InlineKeyboardButton("🏠 Домой", callback_data="home")
-        ),
-    )
-    user_main_messages[user_id]["state"] = "waiting_for_admin_id"
-    await callback_query.answer()
-
 
 
 @dp.callback_query_handler(lambda c: c.data == "list_admins")
@@ -218,38 +183,6 @@ async def remove_admin_callback(callback_query: types.CallbackQuery):
 
 
 
-@dp.callback_query_handler(lambda c: c.data.startswith("ip_info_"))
-async def ip_info_callback(callback_query: types.CallbackQuery):
-    user_id = callback_query.from_user.id
-    if user_id not in ADMINS and user_id not in MODERATORS:
-        await callback_query.answer("Нет прав.", show_alert=True)
-        return
-    username = callback_query.data.split("ip_info_")[1]
-    active_info = next((ac for ac in db.get_active_list() if ac[0] == username), None)
-    if not active_info:
-        await callback_query.answer("Нет данных о подключении.", show_alert=True)
-        return
-
-    ip_address = active_info[3].split(":")[0]
-    async with aiohttp.ClientSession() as session:
-        async with session.get(f"http://ip-api.com/json/{ip_address}") as resp:
-            data = await resp.json() if resp.status == 200 else {}
-
-    text = f"*IP info {username}:*\n" + "\n".join(
-        f"{k.capitalize()}: {v}" for k, v in data.items()
-    )
-    keyboard = InlineKeyboardMarkup(row_width=2).add(
-        InlineKeyboardButton("⬅️ Назад", callback_data=f"client_{username}"),
-        InlineKeyboardButton("🏠 Домой", callback_data="home"),
-    )
-    await BOT.edit_message_text(
-        chat_id=callback_query.message.chat.id,
-        message_id=callback_query.message.message_id,
-        text=text,
-        parse_mode="Markdown",
-        reply_markup=keyboard,
-    )
-    await callback_query.answer()
 
 
 @dp.callback_query_handler(lambda c: c.data.startswith("delete_user_"))

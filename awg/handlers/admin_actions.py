@@ -28,8 +28,9 @@ from utils import get_isp_info, parse_relative_time, parse_transfer
 from fsm.callback_data import ClientCallbackFactory
 from keyboard.menu import get_client_profile_keyboard, get_home_keyboard
 from fsm.admin_state import AdminState
+from service.vpn_service import create_vpn_config
 from service.db_instance import user_db
-from settings import ADMINS, BOT, DB_FILE, MODERATORS
+from settings import ADMINS, DB_FILE, MODERATORS
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -73,6 +74,31 @@ async def add_admin_callback_handler(callback: CallbackQuery, state: FSMContext)
     )
     await state.set_state(AdminState.waiting_for_admin_id)
     logger.info(f"Admin {user_id} entered state waiting_for_admin_id")
+
+
+@router.message(AdminState.waiting_for_user_name)
+async def admin_create_user(message: Message, state: FSMContext):
+    """Обрабатывает ввод имени нового пользователя."""
+    if message.from_user is None or message.text is None:
+        await message.answer("Ошибка: пользователь не определен.", show_alert=True)
+        return
+    admin_id = message.from_user.id
+
+    # Проверка прав
+    if not is_privileged(admin_id):
+        await message.answer("❌ У вас нет прав для этого действия.")
+        await state.clear()
+        return
+
+    user_name = message.text.strip()
+    await message.answer(
+        f"✅ Создаю конфигурацию для пользователя: *{user_name}*", parse_mode="Markdown"
+    )
+
+    # Генерируем конфиг и отправляем его
+    await create_vpn_config(user_name, message)
+
+    await state.clear()
 
 
 @router.callback_query(F.data == "list_users")
@@ -265,9 +291,16 @@ async def client_selected_callback(
                     f"Ошибка при анализе активности клиента: {e}", exc_info=True
                 )
 
+        telegram_name = user_db.get_user_by_telegram_id(username)
+
+        if telegram_name is not False:
+            telegram_name_text = telegram_name.name
+        else:
+            telegram_name_text = ""
+
         # Текст профиля
         text = (
-            f"📧 *Имя:* {username}\n"
+            f"📧 *Имя:* {username} {telegram_name_text}\n"
             f"🌐 *IPv4:* {ipv4_address}\n"
             f"🌐 *Статус:* {status}\n"
             f"🔼 *Исходящий:* {outgoing_traffic}\n"
