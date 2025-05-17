@@ -52,14 +52,14 @@ async def notify_users(users: List[UserData]):
     )
 
 
-async def notify_admins(text: str, parse_mode: str = "Markdown"):
+async def notify_admins(text: str):
     """Рассылает сообщение всем администраторам."""
     successful_sends = 0
     failed_sends = 0
 
     for admin_id in ADMINS:
         try:
-            await BOT.send_message(chat_id=admin_id, text=text, parse_mode=parse_mode)
+            await BOT.send_message(admin_id, text)
             logger.info(f"✅ Сообщение администратору {admin_id} отправлено.")
             successful_sends += 1
         except Exception as e:

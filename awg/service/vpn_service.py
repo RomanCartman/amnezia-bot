@@ -1,4 +1,5 @@
 # awg/users/config_generator.py
+import logging
 import os
 import configparser
 from aiogram.types import Message, FSInputFile
@@ -6,8 +7,10 @@ from utils import generate_deactivate_presharekey, get_vpn_caption
 from db import root_add
 from service.db_instance import user_db
 
+logger = logging.getLogger(__name__)
 
-async def create_vpn_config(user_id: int, message: Message):
+
+async def create_vpn_config(user_id: int, message: Message, admin_add=False):
     """Генерируем файл в докере копируем его в директорию создаем файл и отправляем клиенту"""
     from bot_manager import BOT
 
@@ -23,17 +26,21 @@ async def create_vpn_config(user_id: int, message: Message):
         await message.answer("❌ Не удалось найти сгенерированный конфиг-файл.")
         return
 
-    process_and_add_config(conf_path, user_id)
+    if not admin_add:
+        process_and_add_config(conf_path, user_id)
+    
     config_file = FSInputFile(conf_path)
     config_message = await BOT.send_document(
         message.from_user.id,
         config_file,
         caption=get_vpn_caption(user_id),
-        parse_mode="Markdown",
+        parse_mode="HTML",
     )
     await BOT.pin_chat_message(
         message.from_user.id, config_message.message_id, disable_notification=True
     )
+
+    logging.info(f"VPN конфигурация для пользователя {user_id} успешно отправлена.")
 
 
 def process_and_add_config(file_path: str, telegram_id: str) -> int:

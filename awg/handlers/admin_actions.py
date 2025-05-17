@@ -22,6 +22,7 @@ from aiogram.types import (
 from aiogram.enums import ParseMode
 from aiogram.utils.chat_action import ChatActionSender
 from aiogram.fsm.context import FSMContext
+from aiogram.utils.text_decorations import markdown_decoration
 from admin_service.admin import is_privileged
 from service.send_backup_admin import create_db_backup
 from utils import get_isp_info, parse_relative_time, parse_transfer
@@ -92,11 +93,11 @@ async def admin_create_user(message: Message, state: FSMContext):
 
     user_name = message.text.strip()
     await message.answer(
-        f"✅ Создаю конфигурацию для пользователя: *{user_name}*", parse_mode="Markdown"
+        f"✅ Создаю конфигурацию для пользователя: *{user_name}*", parse_mode="HTML"
     )
 
     # Генерируем конфиг и отправляем его
-    await create_vpn_config(user_name, message)
+    await create_vpn_config(user_name, message, True)
 
     await state.clear()
 
@@ -300,17 +301,17 @@ async def client_selected_callback(
 
         # Текст профиля
         text = (
-            f"📧 *Имя:* {username} {telegram_name_text}\n"
-            f"🌐 *IPv4:* {ipv4_address}\n"
-            f"🌐 *Статус:* {status}\n"
-            f"🔼 *Исходящий:* {outgoing_traffic}\n"
-            f"🔽 *Входящий:* {incoming_traffic}"
+            f"📧 <b>Имя:</b> {username} {telegram_name_text}\n"
+            f"🌐 <b>IPv4:</b> {ipv4_address}\n"
+            f"🌐 <b>Статус:</b> {status}\n"
+            f"🔼 <b>Исходящий:</b> {outgoing_traffic}\n"
+            f"🔽 <b>Входящий:</b> {incoming_traffic}"
         )
 
         # Отправка редактированного сообщения
         await callback.message.edit_text(
             text=text,
-            parse_mode="Markdown",
+            parse_mode="HTML",
             reply_markup=get_client_profile_keyboard(username),
         )
         await callback.answer()
