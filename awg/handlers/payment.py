@@ -163,7 +163,9 @@ async def successful_payment(message: Message):
         else:
             await message.answer("🛡 У вас уже есть активная конфигурация.")
         update_vpn_state()
-        notify_admins(text=f"🔁 Подписка продлена на {months} мес. для {telegram_id}")
+        await notify_admins(
+            text=f"🔁 Подписка продлена на {months} мес. для {telegram_id} \n {message.from_user.username} \n {payload}"
+        )
         await message.answer("✅ Спасибо за покупку! Подписка активирована.")
     except Exception as e:
         logger.error(f"❌ Ошибка при обработке успешной оплаты: {e}")
