@@ -2,6 +2,7 @@ import logging
 import asyncio
 import os
 import sys
+from service.send_backup_admin import send_backup, send_peak_usage
 from utils import load_isp_cache
 import db
 from zoneinfo import ZoneInfo
@@ -57,6 +58,22 @@ async def main():
         trigger="cron",
         hour=9,  # каждый день в 9:00 утра
         minute=30,
+        timezone=ZoneInfo("Europe/Moscow"),
+    )
+
+    scheduler.add_job(
+        send_backup,
+        trigger="cron",
+        hour=0,  # каждый день в 9:00 утра
+        minute=42,
+        timezone=ZoneInfo("Europe/Moscow"),
+    )
+
+    scheduler.add_job(
+        send_peak_usage,
+        trigger="cron",
+        hour=14,  # каждый день в 9:00 утра
+        minute=16,
         timezone=ZoneInfo("Europe/Moscow"),
     )
 

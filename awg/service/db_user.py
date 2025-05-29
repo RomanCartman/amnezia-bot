@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 # Интегрированный класс Database для управления пользователями и конфигурациями VPN
 # =====================================================================
 
+
 class Database:
     def __init__(self, db_path=DB_FILE):
         self.conn = sqlite3.connect(db_path, check_same_thread=False)
@@ -472,6 +473,57 @@ class Database:
                 unique_payload=row[8],
             )
         return None
+
+    def count_active_users(self) -> int:
+        """Считает количество активных пользователей с учётом ограничений."""
+        today = datetime.now().date()
+        month_ago = today - timedelta(days=30)
+
+        self.cursor.execute(
+            """
+            SELECT COUNT(*) FROM users
+            WHERE
+                is_unlimited = 1
+                OR (
+                    end_date IS NOT NULL
+                    AND date(end_date) >= ?
+                    AND subscription_start IS NOT NULL
+                    AND date(subscription_start) >= ?
+                )
+            """,
+            (today.strftime("%Y-%m-%d"), month_ago.strftime("%Y-%m-%d")),
+        )
+        return self.cursor.fetchone()[0]
+    
+    def is_recently_active_user(self, telegram_id: str) -> bool:
+        """Проверяет, является ли пользователь активным или недавно активным (до 30 дней назад)."""
+        self.cursor.execute(
+            """
+            SELECT end_date, is_unlimited
+            FROM users
+            WHERE telegram_id = ?
+            """,
+            (telegram_id,),
+        )
+        row = self.cursor.fetchone()
+
+        if not row:
+            return False  # пользователь не найден
+
+        end_date_str, is_unlimited = row
+
+        if is_unlimited:
+            return True
+
+        if end_date_str:
+            try:
+                end_date = datetime.strptime(end_date_str, "%Y-%m-%d").date()
+                month_ago = datetime.now().date() - timedelta(days=30)
+                return end_date >= month_ago
+            except ValueError:
+                return False  # некорректная дата
+
+        return False
 
     def close(self):
         """Закрывает соединение с базой данных."""

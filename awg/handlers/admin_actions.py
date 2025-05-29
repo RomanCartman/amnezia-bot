@@ -9,6 +9,7 @@ import aiohttp
 import humanize
 from typing import cast
 from zoneinfo import ZoneInfo
+from service.system_stats import parse_vnstat_hourly, plot_traffic_to_buffer
 import db
 from aiogram import Bot
 from aiogram import Router, F
@@ -19,6 +20,7 @@ from aiogram.types import (
     InlineKeyboardButton,
     BufferedInputFile,
 )
+from aiogram.filters import Command
 from aiogram.enums import ParseMode
 from aiogram.utils.chat_action import ChatActionSender
 from aiogram.fsm.context import FSMContext
@@ -464,3 +466,14 @@ async def ip_info_callback(callback: CallbackQuery):
         )
 
     await callback.answer()
+
+
+@router.message(Command("traffic"))
+async def send_traffic_graph(message: Message):
+    data = parse_vnstat_hourly()
+    if not data:
+        await message.answer("❌ Не удалось получить данные vnstat.")
+        return
+    image_buf = plot_traffic_to_buffer(data)
+    photo = BufferedInputFile(file=image_buf.read(), filename="traffic.png")
+    await message.answer_photo(photo, caption="📊 Почасовой график сетевой нагрузки")
