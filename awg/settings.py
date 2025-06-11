@@ -17,6 +17,7 @@ docker_container = setting.get("docker_container")
 endpoint = setting.get("endpoint")
 yookassa_provider_token = setting.get("yookassa_provider_token").strip()
 vpn_name = setting.get("vpn_name")
+fast_api_url = setting.get("fast_api_url")
 
 if not all([bot_token, admin_ids, wg_config_file, docker_container, endpoint]):
     logger.error("Некоторые обязательные настройки отсутствуют.")
@@ -31,6 +32,7 @@ DOCKER_CONTAINER = docker_container
 ENDPOINT = endpoint
 YOOKASSA_PROVIDER_TOKEN = yookassa_provider_token
 VPN_NAME = vpn_name
+FAST_API_URL = fast_api_url
 
 # Кэш и файлы
 ISP_CACHE_FILE = "files/isp_cache.json"
