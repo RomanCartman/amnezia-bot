@@ -304,13 +304,18 @@ def format_profile_text(
     """Форматирует текст профиля пользователя."""
     telegram_name = user_db.get_user_by_telegram_id(username)
     telegram_name_text = telegram_name.name if telegram_name is not False else ""
+    is_unlimited = telegram_name.is_unlimited if telegram_name is not False else 0
+    telegram_end_date_text = "безлимит" if is_unlimited else (
+        telegram_name.end_date if telegram_name is not False else ""
+    )
 
     return (
         f"📧 <b>Имя:</b> {username} {telegram_name_text}\n"
         f"🌐 <b>IPv4:</b> {ipv4_address}\n"
         f"🌐 <b>Статус:</b> {status}\n"
         f"🔼 <b>Исходящий:</b> {outgoing_traffic}\n"
-        f"🔽 <b>Входящий:</b> {incoming_traffic}"
+        f"🔽 <b>Входящий:</b> {incoming_traffic}\n"
+        f"🗓️ <b>Дата окончания:</b> {telegram_end_date_text}"
     )
 
 @router.callback_query(ClientCallbackFactory.filter())

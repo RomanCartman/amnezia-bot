@@ -104,7 +104,7 @@ def get_user_profile_menu() -> InlineKeyboardMarkup:
                 InlineKeyboardButton(
                     text="📥 Получить конфиг", callback_data="get_config"
                 ),
-                InlineKeyboardButton(text="🔄 Продлить", callback_data="renew_vpn"),
+                InlineKeyboardButton(text="🔄 Продлить", callback_data="buy_vpn"),
             ],
             [
                 InlineKeyboardButton(text="ℹ️ Инструкция", callback_data="instructions"),

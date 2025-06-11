@@ -52,7 +52,7 @@ async def handle_extend_subscription(callback: CallbackQuery):
     try:
         month = int(callback.data.split("_")[0])
     except (IndexError, ValueError):
-        await callback.answer("Неверный формат выбораю")
+        await callback.answer("Неверный формат выбора")
         return
 
     prices_by_month = {

@@ -2,6 +2,7 @@ import logging
 import time
 from typing import List
 
+from keyboard.menu import get_user_profile_menu
 from service.db_instance import user_db
 from service.base_model import UserData
 from settings import ADMINS, BOT
@@ -33,7 +34,8 @@ async def notify_users(users: List[UserData]):
         try:
             await BOT.send_message(
                 user.telegram_id,
-                f"Привет, {user.name}! Ваша подписка заканчивается {user.end_date}. Пожалуйста, продлите её вовремя!",
+                f"Привет, {user.name}!\nВаша подписка заканчивается {user.end_date}.\nПожалуйста, продлите её вовремя!",
+                reply_markup = get_user_profile_menu()
             )
 
             # Логируем успешную отправку, если исключение не возникло
