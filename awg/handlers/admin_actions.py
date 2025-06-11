@@ -7,7 +7,7 @@ import re
 import aiofiles
 import aiohttp
 import humanize
-from typing import cast
+from typing import cast, Optional
 from zoneinfo import ZoneInfo
 from service.system_stats import parse_vnstat_hourly, plot_traffic_to_buffer
 import db
@@ -216,10 +216,8 @@ async def admin_list_users_callback(callback: CallbackQuery):
         )
 
 
-@router.callback_query(ClientCallbackFactory.filter())
-async def client_selected_callback(
-    callback: CallbackQuery, callback_data: ClientCallbackFactory
-):
+async def validate_callback_data(callback: CallbackQuery) -> bool:
+    """Проверяет валидность callback данных и права пользователя."""
     user_id = callback.from_user.id
 
     if (
@@ -230,87 +228,118 @@ async def client_selected_callback(
         await callback.answer(
             "Ошибка: пользователь или сообщение не определены.", show_alert=True
         )
-        return
+        return False
 
     if not is_privileged(user_id):
         await callback.answer("Нет прав.", show_allert=True)
+        return False
+    
+    return True
+
+async def get_client_info(username: str) -> Optional[tuple]:
+    """Получает базовую информацию о клиенте."""
+    clients = db.get_client_list()
+    return next((c for c in clients if c[0] == username), None)
+
+def get_client_network_info(client_info: tuple) -> tuple[str, str, str, str]:
+    """Извлекает сетевую информацию клиента."""
+    status = "🔴 Офлайн"
+    incoming_traffic = "↓—"
+    outgoing_traffic = "↑—"
+    ipv4_address = "—"
+
+    if (
+        isinstance(client_info, (tuple, list))
+        and len(client_info) > 2
+        and client_info[2]
+    ):
+        ip_match = re.search(r"(\d{1,3}\.){3}\d{1,3}/\d+", str(client_info[2]))
+        ipv4_address = ip_match.group(0) if ip_match else "—"
+
+    return status, incoming_traffic, outgoing_traffic, ipv4_address
+
+async def update_client_activity_status(
+    username: str,
+    status: str,
+    incoming_traffic: str,
+    outgoing_traffic: str
+) -> tuple[str, str, str]:
+    """Обновляет статус активности клиента."""
+    active_clients = db.get_active_list()
+    active_info = active_clients.get(username)
+
+    if active_info and active_info.last_time.lower() not in ["never", "нет данных", "-"]:
+        try:
+            last_handshake = parse_relative_time(active_info.last_time)
+            if (
+                last_handshake
+                and (
+                    datetime.datetime.now(ZoneInfo("Europe/Moscow"))
+                    - last_handshake
+                ).total_seconds()
+                <= 60
+            ):
+                status = "🟢 Онлайн"
+            else:
+                status = "❌ Офлайн"
+
+            transfer_result = parse_transfer(active_info.transfer)
+            if transfer_result:
+                incoming_bytes, outgoing_bytes = transfer_result
+                incoming_traffic = f"↓{humanize.naturalsize(incoming_bytes)}"
+                outgoing_traffic = f"↑{humanize.naturalsize(outgoing_bytes)}"
+
+        except Exception as e:
+            logger.error(f"Ошибка при анализе активности клиента: {e}", exc_info=True)
+
+    return status, incoming_traffic, outgoing_traffic
+
+def format_profile_text(
+    username: str,
+    ipv4_address: str,
+    status: str,
+    outgoing_traffic: str,
+    incoming_traffic: str
+) -> str:
+    """Форматирует текст профиля пользователя."""
+    telegram_name = user_db.get_user_by_telegram_id(username)
+    telegram_name_text = telegram_name.name if telegram_name is not False else ""
+
+    return (
+        f"📧 <b>Имя:</b> {username} {telegram_name_text}\n"
+        f"🌐 <b>IPv4:</b> {ipv4_address}\n"
+        f"🌐 <b>Статус:</b> {status}\n"
+        f"🔼 <b>Исходящий:</b> {outgoing_traffic}\n"
+        f"🔽 <b>Входящий:</b> {incoming_traffic}"
+    )
+
+@router.callback_query(ClientCallbackFactory.filter())
+async def client_selected_callback(
+    callback: CallbackQuery, callback_data: ClientCallbackFactory
+):
+    """Обработчик выбора клиента."""
+    if not await validate_callback_data(callback):
         return
 
     username = callback_data.username
     logger.info(f"Выбран клиент: {username}")
 
     try:
-        clients = db.get_client_list()
-        client_info = next((c for c in clients if c[0] == username), None)
+        client_info = await get_client_info(username)
         if not client_info:
             await callback.answer("Пользователь не найден.", show_alert=True)
             return
 
-        # Значения по умолчанию
-        status = "🔴 Офлайн"
-        incoming_traffic = "↓—"
-        outgoing_traffic = "↑—"
-        ipv4_address = "—"
-
-        if (
-            isinstance(client_info, (tuple, list))
-            and len(client_info) > 2
-            and client_info[2]
-        ):
-            ip_match = re.search(r"(\d{1,3}\.){3}\d{1,3}/\d+", str(client_info[2]))
-            ipv4_address = ip_match.group(0) if ip_match else "—"
-
-        # Проверка активности
-        active_clients = db.get_active_list()
-        active_info = active_clients.get(username)
-
-        if active_info and active_info.last_time.lower() not in [
-            "never",
-            "нет данных",
-            "-",
-        ]:
-            try:
-                last_handshake = parse_relative_time(active_info.last_time)
-                if (
-                    last_handshake
-                    and (
-                        datetime.datetime.now(ZoneInfo("Europe/Moscow"))
-                        - last_handshake
-                    ).total_seconds()
-                    <= 60
-                ):
-                    status = "🟢 Онлайн"
-                else:
-                    status = "❌ Офлайн"
-
-                transfer_result = parse_transfer(active_info.transfer)
-                if transfer_result:
-                    incoming_bytes, outgoing_bytes = transfer_result
-                    incoming_traffic = f"↓{humanize.naturalsize(incoming_bytes)}"
-                    outgoing_traffic = f"↑{humanize.naturalsize(outgoing_bytes)}"
-
-            except Exception as e:
-                logger.error(
-                    f"Ошибка при анализе активности клиента: {e}", exc_info=True
-                )
-
-        telegram_name = user_db.get_user_by_telegram_id(username)
-
-        if telegram_name is not False:
-            telegram_name_text = telegram_name.name
-        else:
-            telegram_name_text = ""
-
-        # Текст профиля
-        text = (
-            f"📧 <b>Имя:</b> {username} {telegram_name_text}\n"
-            f"🌐 <b>IPv4:</b> {ipv4_address}\n"
-            f"🌐 <b>Статус:</b> {status}\n"
-            f"🔼 <b>Исходящий:</b> {outgoing_traffic}\n"
-            f"🔽 <b>Входящий:</b> {incoming_traffic}"
+        status, incoming_traffic, outgoing_traffic, ipv4_address = get_client_network_info(client_info)
+        
+        status, incoming_traffic, outgoing_traffic = await update_client_activity_status(
+            username, status, incoming_traffic, outgoing_traffic
         )
 
-        # Отправка редактированного сообщения
+        text = format_profile_text(
+            username, ipv4_address, status, outgoing_traffic, incoming_traffic
+        )
+
         await callback.message.edit_text(
             text=text,
             parse_mode="HTML",
