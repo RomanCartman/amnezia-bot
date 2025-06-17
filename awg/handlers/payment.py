@@ -48,10 +48,17 @@ def get_plans_keyboard(system):
 
 @router.callback_query(F.data == "buy_vpn")
 async def buy_vpn(callback: CallbackQuery):
-    await callback.message.edit_text(
-        "Выберите способ оплаты:",
-        reply_markup=get_payment_systems_keyboard(),
-    )
+    if callback.message.text:
+        await callback.message.edit_text(
+            "Выберите способ оплаты:",
+            reply_markup=get_payment_systems_keyboard(),
+        )
+    else:
+        await callback.message.delete()
+        await callback.message.answer(
+            "Выберите способ оплаты:",
+            reply_markup=get_payment_systems_keyboard(),
+        )
     await callback.answer()
 
 
