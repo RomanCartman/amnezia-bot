@@ -13,7 +13,6 @@ from aiogram.enums import ContentType
 from aiogram.types import CallbackQuery
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
-from keyboard.menu import get_extend_subscription_keyboard
 from service.generate_vpn_key import generate_vpn_key
 from service.db_instance import user_db
 from aiogram.types import Message, FSInputFile
