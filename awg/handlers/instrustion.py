@@ -93,8 +93,7 @@ async def send_android_instruction(callback: CallbackQuery):
 
 @router.callback_query(F.data == "instructions")
 async def show_instructions(callback: CallbackQuery):
-
-    if isinstance(callback.message, Message):
+    if isinstance(callback.message, Message) and callback.message.text:
         await callback.message.edit_text(
             text=(
                 "Чтобы начать, сначала скачайте приложение, затем установите его. После установки выберите тип вашего устройства, чтобы получить подробные инструкции.\n\n"
@@ -105,5 +104,15 @@ async def show_instructions(callback: CallbackQuery):
             ),
             disable_web_page_preview=True,
             reply_markup=get_instruction_type(),
+        )
+    else:
+        await callback.message.answer(
+            "Чтобы начать, сначала скачайте приложение, затем установите его. После установки выберите тип вашего устройства, чтобы получить подробные инструкции.\n\n"
+            "Ссылки для скачивания AmneziaVPN:\n"
+            "📱 Если у вас iPhone или iPad – скачайте приложение здесь: [App Store](https://apps.apple.com/ru/app/amneziawg/id6478942365)\n\n"
+            "🤖 Если у вас Android – скачайте приложение здесь: [Google Play](https://play.google.com/store/apps/details?id=org.amnezia.vpn&hl=ru)\n\n"
+            "После установки выберите свое устройство, чтобы узнать, как настроить приложение.",
+            reply_markup=get_instruction_type(),
+            disable_web_page_preview=True,
         )
     await callback.answer()

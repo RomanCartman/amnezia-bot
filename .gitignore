@@ -8,3 +8,5 @@ awg/removeclient.sh
 /.mypy_cache
 awg/database.db
 /backups
+.cursorindexingignore
+.specstory/history/
