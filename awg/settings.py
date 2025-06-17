@@ -39,6 +39,30 @@ ISP_CACHE_FILE = "files/isp_cache.json"
 CACHE_TTL = 24 * 3600  # 24 часа
 DB_FILE = "database.db"
 
+# Активные платёжные системы
+ACTIVE_PAYMENT_SYSTEMS = [  
+    "telegram_stars",  # Telegram Stars
+]
+
+# Планы подписки для каждой платёжной системы
+PAYMENT_PLANS = {
+    "yookassa": {
+        "currency": "RUB",
+        "plans": [
+            {"months": 1, "price": 80, "label": "1 месяц - 80₽"},
+            {"months": 2, "price": 150, "label": "2 месяца - 150₽"},
+            {"months": 3, "price": 210, "label": "3 месяца - 210₽"},
+        ],
+    },
+    "telegram_stars": {
+        "currency": "STARS",
+        "plans": [
+            {"months": 1, "price": 100, "label": "1 месяц - 100⭐"},
+            {"months": 2, "price": 180, "label": "2 месяца - 180⭐"},
+            {"months": 3, "price": 250, "label": "3 месяца - 250⭐"},
+        ],
+    },
+}
 
 async def check_environment():
     if DOCKER_CONTAINER not in subprocess.check_output(

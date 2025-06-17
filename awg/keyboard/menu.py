@@ -82,21 +82,6 @@ def get_user_main_menu() -> InlineKeyboardMarkup:
     )
 
 
-def get_extend_subscription_keyboard() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(text="1 месяц - 80₽", callback_data="1_extend"),
-                InlineKeyboardButton(text="2 месяца - 150₽", callback_data="2_extend"),
-            ],
-            [
-                InlineKeyboardButton(text="3 месяца - 210₽", callback_data="3_extend"),
-                InlineKeyboardButton(text="◀️ Назад", callback_data="home"),
-            ],
-        ]
-    )
-
-
 def get_user_profile_menu() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[

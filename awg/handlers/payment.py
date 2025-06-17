@@ -11,86 +11,103 @@ from aiogram import Router, F
 from aiogram.types import LabeledPrice, PreCheckoutQuery, Message
 from aiogram.enums import ContentType
 from aiogram.types import CallbackQuery
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 from keyboard.menu import get_extend_subscription_keyboard
 from service.generate_vpn_key import generate_vpn_key
 from service.db_instance import user_db
 from aiogram.types import Message, FSInputFile
-from settings import BOT, YOOKASSA_PROVIDER_TOKEN
+from settings import BOT, YOOKASSA_PROVIDER_TOKEN, ACTIVE_PAYMENT_SYSTEMS, PAYMENT_PLANS
 
 
 logger = logging.getLogger(__name__)
 router = Router()
 
 
+# Клавиатура выбора платёжной системы
+
+def get_payment_systems_keyboard():
+    buttons = []
+    if "yookassa" in ACTIVE_PAYMENT_SYSTEMS:
+        buttons.append(InlineKeyboardButton(text="💳 ЮKassa", callback_data="pay_yookassa"))
+    if "telegram_stars" in ACTIVE_PAYMENT_SYSTEMS:
+        buttons.append(InlineKeyboardButton(text="⭐ Telegram Stars", callback_data="pay_telegram_stars"))
+    return InlineKeyboardMarkup(inline_keyboard=[[b] for b in buttons])
+
+
+# Клавиатура выбора плана для конкретной системы
+
+def get_plans_keyboard(system):
+    plans = PAYMENT_PLANS[system]["plans"]
+    buttons = [
+        [InlineKeyboardButton(text=plan["label"], callback_data=f"plan_{system}_{plan['months']}")]
+        for plan in plans
+    ]
+    buttons.append([InlineKeyboardButton(text="◀️ Назад", callback_data="buy_vpn")])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
 @router.callback_query(F.data == "buy_vpn")
 async def buy_vpn(callback: CallbackQuery):
-    logger.info(f"🔔 buy_vpn triggered by {callback.from_user.id}")
-    if callback.message is None:
-        await callback.answer("Ошибка: бот недоступен.")
-        return
-    await callback.message.answer(
-        "💰 Выберите срок подписки:", reply_markup=get_extend_subscription_keyboard()
+    await callback.message.edit_text(
+        "Выберите способ оплаты:",
+        reply_markup=get_payment_systems_keyboard(),
     )
     await callback.answer()
 
 
-# 👉 Обработка кнопок "Купить VPN"
-@router.callback_query(F.data.endswith("_extend"))
-async def handle_extend_subscription(callback: CallbackQuery):
-    if (
-        callback.bot is None
-        or callback.data is None
-        or callback.message is None
-        or callback.message.bot is None
-    ):
-        await callback.answer("Ошибка: бот недоступен.")
+@router.callback_query(F.data.startswith("pay_"))
+async def choose_payment_system(callback: CallbackQuery):
+    system = callback.data.split("pay_")[1]
+    if system not in ACTIVE_PAYMENT_SYSTEMS:
+        await callback.answer("Этот способ оплаты сейчас недоступен.", show_alert=True)
         return
-
-    telegram_id = callback.from_user.id
-
-    try:
-        month = int(callback.data.split("_")[0])
-    except (IndexError, ValueError):
-        await callback.answer("Неверный формат выбора")
-        return
-
-    prices_by_month = {
-        1: 80,
-        2: 150,
-        3: 210,
-    }
-
-    price_per_month = prices_by_month.get(month)
-    if not price_per_month:
-        await callback.answer("Выбранный срок недоступен.")
-        return
-
-    amount = price_per_month * 100  # копейки
-    logger.info(f"{telegram_id} - {month} mec. - {price_per_month}₽")
-    unique_payload = str(uuid.uuid4())
-
-    await callback.message.bot.send_invoice(
-        chat_id=telegram_id,
-        title=f"Безопасное соединение на {month} mec.",
-        description="Мы предоставляем безопасное соединение",
-        payload=f"{unique_payload}-{telegram_id}-{month}-{price_per_month}",
-        provider_token=YOOKASSA_PROVIDER_TOKEN,
-        currency="RUB",
-        prices=[LabeledPrice(label="RUB", amount=amount)],
-        start_parameter="vpn-subscription",
-    )
-
-    user_db.add_payment(
-        user_id=telegram_id,
-        amount=amount / 100,
-        months=month,
-        provider_payment_id=None,
-        raw_payload=f"{unique_payload}-{telegram_id}-{month}-{price_per_month}",
-        status="pending",
-        unique_payload=f"{unique_payload}-{telegram_id}-{month}-{price_per_month}",
+    await callback.message.edit_text(
+        f"Выберите тариф для {system.replace('_', ' ').title()}: ",
+        reply_markup=get_plans_keyboard(system),
     )
     await callback.answer()
+
+
+@router.callback_query(F.data.startswith("plan_"))
+async def handle_plan_choice(callback: CallbackQuery):
+    _, system, months = callback.data.split("_", 2)
+    months = int(months)
+    plans = PAYMENT_PLANS[system]["plans"]
+    plan = next((p for p in plans if p["months"] == months), None)
+    if not plan:
+        await callback.answer("Тариф не найден", show_alert=True)
+        return
+    if system == "yookassa":
+        # ЮKassa invoice
+        amount = plan["price"] * 100
+        await callback.message.bot.send_invoice(
+            chat_id=callback.from_user.id,
+            title=f"VPN на {months} мес.",
+            description="Безопасное соединение",
+            payload=f"yookassa-{callback.from_user.id}-{months}-{plan['price']}",
+            provider_token=YOOKASSA_PROVIDER_TOKEN,
+            currency="RUB",
+            prices=[LabeledPrice(label="RUB", amount=amount)],
+            start_parameter="vpn-subscription",
+        )
+        await callback.answer()
+    elif system == "telegram_stars":
+        # Telegram Stars invoice
+        amount = plan["price"]
+        await callback.message.bot.send_invoice(
+            chat_id=callback.from_user.id,
+            title=f"VPN на {months} мес.",
+            description="Безопасное соединение",
+            payload=f"telegram_stars-{callback.from_user.id}-{months}-{plan['price']}",
+            provider_token="STARS",  # Telegram Stars magic token
+            currency="STARS",
+            prices=[LabeledPrice(label="STARS", amount=amount)],
+            start_parameter="vpn-stars-subscription",
+        )
+        await callback.answer()
+    else:
+        await callback.answer("Неизвестная платёжная система", show_alert=True)
 
 
 # 👉 Pre-checkout обработка
