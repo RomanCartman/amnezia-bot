@@ -300,7 +300,7 @@ clone_repository() {
         return 0
     fi
     
-    run_with_spinner "Клонирование репозитория" "git clone https://github.com/Kazykan/amnezia-bot.git >/dev/null 2>&1"
+    run_with_spinner "Клонирование репозитория" "git clone https://github.com/RomanCartman/amnezia-bot.git >/dev/null 2>&1"
     cd amnezia-bot || { echo -e "\n${RED}Ошибка перехода в директорию${NC}"; exit 1; }
 }
 
