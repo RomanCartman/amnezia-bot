@@ -511,3 +511,35 @@ async def send_traffic_graph(message: Message):
     image_buf = plot_traffic_to_buffer(data)
     photo = BufferedInputFile(file=image_buf.read(), filename="traffic.png")
     await message.answer_photo(photo, caption="📊 Почасовой график сетевой нагрузки")
+
+
+@router.callback_query(F.data.startswith("delete_user_"))
+async def delete_user_callback(callback: CallbackQuery):
+    user_id = callback.from_user.id
+    if not is_privileged(user_id):
+        await callback.answer("Нет прав.", show_alert=True)
+        return
+
+    if callback.data is None or callback.message is None:
+        await callback.answer("Ошибка: данные не получены.", show_alert=True)
+        return
+
+    username = callback.data.split("delete_user_")[1]
+    try:
+        # Удаляем из БД
+        db.remove_client(username)
+        # Удаляем файлы пользователя, если есть
+        import shutil, os
+        user_dir = os.path.join("users", username)
+        shutil.rmtree(user_dir, ignore_errors=True)
+        await callback.message.edit_text(
+            f"Пользователь <b>{username}</b> удалён.",
+            parse_mode="HTML",
+            reply_markup=get_home_keyboard(),
+        )
+        logger.info(f"Пользователь {username} удалён админом {user_id}")
+    except Exception as e:
+        logger.error(f"Ошибка при удалении пользователя {username}: {e}", exc_info=True)
+        await callback.answer(f"Ошибка при удалении: {e}", show_alert=True)
+    else:
+        await callback.answer("Пользователь удалён.")
