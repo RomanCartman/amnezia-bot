@@ -526,8 +526,8 @@ async def delete_user_callback(callback: CallbackQuery):
 
     username = callback.data.split("delete_user_")[1]
     try:
-        # Удаляем из БД
-        db.remove_client(username)
+        # Удаляем из AmneziaVPN/WireGuard через deactive_user_db
+        db.deactive_user_db(username)
         # Удаляем файлы пользователя, если есть
         import shutil, os
         user_dir = os.path.join("users", username)
