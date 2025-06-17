@@ -77,8 +77,9 @@ async def choose_payment_system(callback: CallbackQuery):
 
 @router.callback_query(F.data.startswith("plan_"))
 async def handle_plan_choice(callback: CallbackQuery):
-    _, system, months = callback.data.split("_", 2)
-    months = int(months)
+    parts = callback.data.split("_")
+    system = "_".join(parts[1:-1])
+    months = int(parts[-1])
     plans = PAYMENT_PLANS[system]["plans"]
     plan = next((p for p in plans if p["months"] == months), None)
     if not plan:
